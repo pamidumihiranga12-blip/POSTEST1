@@ -466,3 +466,77 @@ export const getSupplierPayments = async (supplierId?: string) => {
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierPayment));
 };
+
+// Delete Customer Sales Invoice
+export const deleteInvoice = async (id: string) => {
+  const docRef = doc(db, COLLECTIONS.INVOICES, id);
+  const snapshot = await getDoc(docRef);
+  if (snapshot.exists()) {
+    const invoice = snapshot.data() as Invoice;
+
+    // 1. Revert stock for each item
+    if (invoice.items && Array.isArray(invoice.items)) {
+      for (const item of invoice.items) {
+        try {
+          if (!item?.product?.id) continue;
+          const productRef = doc(db, COLLECTIONS.PRODUCTS, item.product.id);
+          await updateDoc(productRef, {
+            stock: increment(item.quantity || 1),
+            updatedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          console.warn('Stock reversion failed for deleted invoice item:', item?.product?.id, err);
+        }
+      }
+    }
+
+    // 2. Revert customer loyalty points & purchases
+    if (invoice.customerId) {
+      try {
+        const customerRef = doc(db, COLLECTIONS.CUSTOMERS, invoice.customerId);
+        await updateDoc(customerRef, {
+          totalPurchases: increment(-(invoice.total || 0)),
+          loyaltyPoints: increment(-Math.floor((invoice.total || 0) / 100)),
+        });
+      } catch (err) {
+        console.warn('Customer loyalty reversion failed:', err);
+      }
+    }
+
+    // 3. Revert voucher usage count
+    if (invoice.voucherId) {
+      try {
+        const voucherRef = doc(db, COLLECTIONS.VOUCHERS, invoice.voucherId);
+        await updateDoc(voucherRef, {
+          usedCount: increment(-1),
+        });
+      } catch (err) {
+        console.warn('Voucher usage reversion failed:', err);
+      }
+    }
+  }
+
+  // 4. Delete the invoice doc
+  await deleteDoc(docRef);
+};
+
+// Delete Supplier Payment Invoice
+export const deleteSupplierPayment = async (id: string) => {
+  const docRef = doc(db, COLLECTIONS.SUPPLIER_PAYMENTS, id);
+  const snapshot = await getDoc(docRef);
+  if (snapshot.exists()) {
+    const payment = snapshot.data() as SupplierPayment;
+
+    // Revert supplier balance (increase balance by the payment total amount, since we no longer paid it)
+    if (payment.supplierId && payment.totalAmount) {
+      try {
+        await adjustSupplierBalance(payment.supplierId, payment.totalAmount);
+      } catch (err) {
+        console.warn('Reverting supplier balance failed for deleted payment:', payment.supplierId, err);
+      }
+    }
+  }
+
+  // Delete the payment document
+  await deleteDoc(docRef);
+};

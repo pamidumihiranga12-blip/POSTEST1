@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings, getProducts, getSupplierPayments } from '../firebase/firestore';
+import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings, getProducts, getSupplierPayments, deleteSupplierPayment } from '../firebase/firestore';
 import { Supplier, Product, SupplierPayment } from '../store/posStore';
 import { useForm } from 'react-hook-form';
 import { Truck, Plus, Search, Edit2, Trash2, X, Save, Mail, Phone, MapPin, DollarSign, Building, Wallet, Banknote, CreditCard, Smartphone, Printer, ToggleLeft, ToggleRight } from 'lucide-react';
@@ -158,6 +158,20 @@ const Suppliers: React.FC = () => {
       toast.error('Failed to settle payment');
     } finally {
       setSettling(false);
+    }
+  };
+
+  const handleDeleteSupplierPayment = async (id: string, invoiceNumber: string) => {
+    if (!window.confirm(`Are you sure you want to delete supplier payment invoice ${invoiceNumber}? This will revert the supplier's outstanding balance.`)) {
+      return;
+    }
+    try {
+      await deleteSupplierPayment(id);
+      toast.success(`Supplier payment ${invoiceNumber} deleted successfully`);
+      loadSuppliers();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete supplier payment');
     }
   };
 
@@ -519,36 +533,45 @@ const Suppliers: React.FC = () => {
                       Rs. {payment.totalAmount.toLocaleString()}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => {
-                          const supp = suppliers.find(s => s.id === payment.supplierId) || {
-                            id: payment.supplierId,
-                            name: payment.supplierName,
-                            company: payment.supplierCompany || '',
-                            balance: 0,
-                            phone: '',
-                            email: '',
-                            address: '',
-                            createdAt: ''
-                          };
-                          generateSettleInvoice({
-                            invoiceNumber: payment.invoiceNumber,
-                            supplier: supp as any,
-                            productName: payment.productName || undefined,
-                            unitsPaid: payment.unitsPaid,
-                            costPerUnit: payment.costPerUnit,
-                            totalAmount: payment.totalAmount,
-                            paymentMethod: payment.paymentMethod,
-                            previousBalance: payment.totalAmount, // Mock previous balance since it's already settled
-                            newBalance: 0,
-                            note: payment.note || '',
-                          });
-                        }}
-                        className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold"
-                        title="Print Invoice"
-                      >
-                        <Printer className="w-3.5 h-3.5" /> Print
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            const supp = suppliers.find(s => s.id === payment.supplierId) || {
+                              id: payment.supplierId,
+                              name: payment.supplierName,
+                              company: payment.supplierCompany || '',
+                              balance: 0,
+                              phone: '',
+                              email: '',
+                              address: '',
+                              createdAt: ''
+                            };
+                            generateSettleInvoice({
+                              invoiceNumber: payment.invoiceNumber,
+                              supplier: supp as any,
+                              productName: payment.productName || undefined,
+                              unitsPaid: payment.unitsPaid,
+                              costPerUnit: payment.costPerUnit,
+                              totalAmount: payment.totalAmount,
+                              paymentMethod: payment.paymentMethod,
+                              previousBalance: payment.totalAmount, // Mock previous balance since it's already settled
+                              newBalance: 0,
+                              note: payment.note || '',
+                            });
+                          }}
+                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Print Invoice"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> Print
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSupplierPayment(payment.id, payment.invoiceNumber)}
+                          className="p-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Delete Payment Record"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

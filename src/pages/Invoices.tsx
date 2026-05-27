@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getInvoices } from '../firebase/firestore';
+import { getInvoices, deleteInvoice } from '../firebase/firestore';
 import { Invoice } from '../store/posStore';
-import { FileText, Search, Eye, Printer, X, Calendar, CreditCard, Banknote, Smartphone } from 'lucide-react';
+import { FileText, Search, Eye, Printer, X, Calendar, CreditCard, Banknote, Smartphone, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -28,6 +28,23 @@ const Invoices: React.FC = () => {
       setInvoices(data);
     } catch (error) { toast.error('Failed to load invoices'); }
     finally { setLoading(false); }
+  };
+
+  const handleDeleteInvoice = async (id: string, invoiceNumber: string) => {
+    if (!window.confirm(`Are you sure you want to delete invoice ${invoiceNumber}? This will revert product stock and customer loyalty points.`)) {
+      return;
+    }
+    try {
+      await deleteInvoice(id);
+      toast.success(`Invoice ${invoiceNumber} deleted successfully`);
+      if (selectedInvoice?.id === id) {
+        setSelectedInvoice(null);
+      }
+      loadInvoices();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete invoice');
+    }
   };
 
   const filtered = invoices.filter(inv => {
@@ -124,9 +141,14 @@ const Invoices: React.FC = () => {
                     }`}>{inv.status}</span>
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <button onClick={() => setSelectedInvoice(inv)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-indigo-500 transition-colors">
-                      <Eye className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => setSelectedInvoice(inv)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-indigo-500 transition-colors" title="View Details">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 transition-colors" title="Delete Invoice">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -145,6 +167,9 @@ const Invoices: React.FC = () => {
                 <p className="text-sm text-gray-400">{format(new Date(selectedInvoice.createdAt), 'MMMM d, yyyy h:mm a')}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={() => handleDeleteInvoice(selectedInvoice.id, selectedInvoice.invoiceNumber)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-medium transition-colors" title="Delete Invoice">
+                  <Trash2 className="w-4 h-4" /> Delete
+                </button>
                 <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm transition-colors">
                   <Printer className="w-4 h-4" /> Print
                 </button>
