@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase/config';
-import { getUserProfile, createUserProfile } from '../../firebase/firestore';
+import { getUserProfile, createUserProfile, updateUserProfile } from '../../firebase/firestore';
 import { useAuthStore, ADMIN_EMAIL } from '../../store/authStore';
 import { Eye, EyeOff, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -40,7 +40,12 @@ const Login: React.FC = () => {
         profile = newProfile;
       }
 
-      if (!profile.isActive && profile.email !== ADMIN_EMAIL) {
+      if (profile.email === ADMIN_EMAIL && !profile.isActive) {
+        profile.isActive = true;
+        await updateUserProfile(user.uid, { isActive: true });
+      }
+
+      if (!profile.isActive) {
         toast.error('Your account has been deactivated. Contact admin.');
         await auth.signOut();
         return;
