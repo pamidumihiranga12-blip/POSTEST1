@@ -22,7 +22,9 @@ import Customers from './pages/Customers';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import AdminPanel from './pages/AdminPanel';
-
+import Profile from './pages/Profile';
+import Suppliers from './pages/Suppliers';
+import InvoiceSettings from './pages/InvoiceSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
