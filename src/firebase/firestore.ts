@@ -139,37 +139,72 @@ export const deleteCustomer = async (id: string) => {
   await deleteDoc(doc(db, COLLECTIONS.CUSTOMERS, id));
 };
 
+// Utility: remove all undefined values recursively (Firestore rejects undefined)
+const stripUndefined = (obj: any): any => {
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    );
+  }
+  return obj;
+};
+
 // Invoices
-export const createInvoice = async (invoice: Omit<Invoice, 'id'>) => {
-  const docRef = await addDoc(collection(db, COLLECTIONS.INVOICES), {
+export const createInvoice = async (invoice: any) => {
+  // Clean invoice — remove any undefined fields before saving to Firestore
+  const cleanInvoice = stripUndefined({
     ...invoice,
     createdAt: new Date().toISOString(),
   });
 
-  // Update stock for each item
+  let docRef: any;
+  try {
+    docRef = await addDoc(collection(db, COLLECTIONS.INVOICES), cleanInvoice);
+  } catch (err) {
+    console.error('Error adding invoice document:', err);
+    throw err;
+  }
+
+  // Update stock for each item (non-blocking — don't fail invoice if stock update fails)
   for (const item of invoice.items) {
-    const productRef = doc(db, COLLECTIONS.PRODUCTS, item.product.id);
-    await updateDoc(productRef, {
-      stock: Math.max(0, item.product.stock - item.quantity),
-      updatedAt: new Date().toISOString(),
-    });
+    try {
+      if (!item?.product?.id) continue;
+      const productRef = doc(db, COLLECTIONS.PRODUCTS, item.product.id);
+      await updateDoc(productRef, {
+        stock: Math.max(0, (item.product.stock || 0) - (item.quantity || 1)),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.warn('Stock update failed for product:', item?.product?.id, err);
+    }
   }
 
-  // Update customer loyalty points if customer exists
+  // Update customer loyalty points if customer exists (non-blocking)
   if (invoice.customerId) {
-    const customerRef = doc(db, COLLECTIONS.CUSTOMERS, invoice.customerId);
-    await updateDoc(customerRef, {
-      totalPurchases: increment(invoice.total),
-      loyaltyPoints: increment(Math.floor(invoice.total / 100)),
-    });
+    try {
+      const customerRef = doc(db, COLLECTIONS.CUSTOMERS, invoice.customerId);
+      await updateDoc(customerRef, {
+        totalPurchases: increment(invoice.total || 0),
+        loyaltyPoints: increment(Math.floor((invoice.total || 0) / 100)),
+      });
+    } catch (err) {
+      console.warn('Customer loyalty update failed:', err);
+    }
   }
 
-  // Update voucher usage if applied
+  // Update voucher usage if applied (non-blocking)
   if (invoice.voucherId) {
-    const voucherRef = doc(db, COLLECTIONS.VOUCHERS, invoice.voucherId);
-    await updateDoc(voucherRef, {
-      usedCount: increment(1),
-    });
+    try {
+      const voucherRef = doc(db, COLLECTIONS.VOUCHERS, invoice.voucherId);
+      await updateDoc(voucherRef, {
+        usedCount: increment(1),
+      });
+    } catch (err) {
+      console.warn('Voucher usage update failed:', err);
+    }
   }
 
   return docRef.id;

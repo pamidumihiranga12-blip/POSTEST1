@@ -70,7 +70,7 @@ const InvoiceSettings: React.FC = () => {
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:76mm; margin:2mm auto; font-family:'Courier New',monospace; font-size:11px; color:#111; }
+  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:'Courier New',monospace; font-size:11px; color:#111; }
   .center { text-align:center; }
   .name { font-size:16px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:1px; }
   .tagline { font-size:9px; color:#555; margin-top:1mm; }
@@ -128,7 +128,8 @@ const InvoiceSettings: React.FC = () => {
   <hr>
   <div class="thank">⭐ ${settings.thankYouMessage} ⭐</div>
   ${settings.returnPolicy ? `<div class="policy">${settings.returnPolicy}</div>` : ''}
-  <div class="footer">━━━━━━━━━━━━━━━━━━━━━━<br>${settings.footerNote}</div>
+  <hr>
+  <div class="footer">${settings.footerNote}</div>
 </body>
 </html>`;
 

@@ -108,25 +108,47 @@ const Billing: React.FC = () => {
     setLoading(true);
     try {
       const invoiceNumber = generateInvoiceNumber();
-      const invoice = {
+      const invoice: any = {
         invoiceNumber,
-        customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name || 'Walk-in Customer',
         customerPhone: selectedCustomer?.phone || '',
-        items: cart,
+        items: cart.map(item => ({
+          product: {
+            id: item.product.id,
+            name: item.product.name,
+            price: item.product.price,
+            costPrice: item.product.costPrice || 0,
+            stock: item.product.stock,
+            minStock: item.product.minStock || 0,
+            category: item.product.category,
+            barcode: item.product.barcode || ''
+          },
+          quantity: item.quantity,
+          discount: item.discount,
+          total: item.total
+        })),
         subtotal: getSubtotal(),
         discount: getDiscount(),
         tax: 0,
         total: getTotal(),
         paymentMethod,
-        cashReceived: paymentMethod === 'cash' && cashReceived ? Number(cashReceived) : undefined,
-        cashChange: paymentMethod === 'cash' && cashReceived ? Math.max(0, Number(cashReceived) - getTotal()) : undefined,
-        voucherId: appliedVoucher?.id,
         status: 'paid' as const,
         createdAt: new Date().toISOString(),
         createdBy: userProfile?.displayName || 'Staff',
         cashierId: userProfile?.uid || '',
       };
+
+      if (selectedCustomer?.id) {
+        invoice.customerId = selectedCustomer.id;
+      }
+      if (appliedVoucher?.id) {
+        invoice.voucherId = appliedVoucher.id;
+      }
+      if (paymentMethod === 'cash' && cashReceived) {
+        invoice.cashReceived = Number(cashReceived);
+        invoice.cashChange = Math.max(0, Number(cashReceived) - getTotal());
+      }
+
       await createInvoice(invoice);
       setLastInvoice(invoice);
       clearCart();
@@ -136,8 +158,9 @@ const Billing: React.FC = () => {
       setTimeout(() => printReceipt(invoice, invoiceSettings), 600);
       await loadData();
       toast.success('Invoice created! Printing receipt...');
-    } catch {
-      toast.error('Failed to create invoice');
+    } catch (error: any) {
+      console.error('Failed to create invoice:', error);
+      toast.error('Failed to create invoice: ' + (error.message || error));
     } finally {
       setLoading(false);
     }
@@ -176,8 +199,9 @@ const Billing: React.FC = () => {
     @page { size: 80mm auto; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 76mm;
-      margin: 2mm auto;
+      width: 72mm;
+      margin: 0 auto;
+      padding: 4mm 2mm;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
       color: #111;
@@ -228,7 +252,7 @@ const Billing: React.FC = () => {
     .inv-number { font-size: 10px; font-weight: 700; color: ${primaryColor}; }
     .cashier-badge { background: #f0f0f0; border-radius: 4px; padding: 1px 4px; font-size: 9px; }
     @media print {
-      body { width: 76mm; }
+      body { width: 72mm; margin: 0 auto; padding: 2mm 1mm; }
       button { display: none !important; }
     }
   </style>
@@ -300,10 +324,10 @@ const Billing: React.FC = () => {
   </table>
 
   <hr class="divider">
-
   <div class="thank-you">⭐ ${thankYou} ⭐</div>
   ${returnPolicy ? `<div class="return-policy">${returnPolicy}</div>` : ''}
-  <div class="footer">━━━━━━━━━━━━━━━━━━━━━━<br>${footerNote}<br>🕐 ${format(new Date(invoice.createdAt), 'dd MMM yyyy, hh:mm a')}</div>
+  <hr class="divider">
+  <div class="footer">${footerNote}<br>🕐 ${format(new Date(invoice.createdAt), 'dd MMM yyyy, hh:mm a')}</div>
 
   <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
 </body>
