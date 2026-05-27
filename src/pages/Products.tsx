@@ -176,23 +176,31 @@ const Products: React.FC = () => {
   // Filter & sort
   const filtered = useMemo(() => {
     let result = products.filter(p => {
-      const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.barcode.includes(searchQuery) || p.category.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchCat = !filterCategory || p.category === filterCategory;
+      if (!p) return false;
+      const name = p.name || '';
+      const barcode = p.barcode || '';
+      const category = p.category || '';
+      const stock = p.stock || 0;
+      const minStock = p.minStock || 0;
+
+      const matchSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        barcode.includes(searchQuery) || category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchCat = !filterCategory || category === filterCategory;
       const matchStock =
         filterStock === 'all' ? true :
-        filterStock === 'low' ? (p.stock <= p.minStock && p.stock > 0) :
-        p.stock <= 0;
+        filterStock === 'low' ? (stock <= minStock && stock > 0) :
+        stock <= 0;
       return matchSearch && matchCat && matchStock;
     });
 
     result.sort((a, b) => {
+      if (!a || !b) return 0;
       let cmp = 0;
       switch (sortBy) {
-        case 'name': cmp = a.name.localeCompare(b.name); break;
-        case 'price': cmp = a.price - b.price; break;
-        case 'stock': cmp = a.stock - b.stock; break;
-        case 'category': cmp = a.category.localeCompare(b.category); break;
+        case 'name': cmp = (a.name || '').localeCompare(b.name || ''); break;
+        case 'price': cmp = (a.price || 0) - (b.price || 0); break;
+        case 'stock': cmp = (a.stock || 0) - (b.stock || 0); break;
+        case 'category': cmp = (a.category || '').localeCompare(b.category || ''); break;
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -212,8 +220,11 @@ const Products: React.FC = () => {
   }, [watchPrice, watchCostPrice]);
 
   const getStockBadge = (product: Product) => {
-    if (product.stock <= 0) return { label: 'Out of Stock', cls: 'bg-red-100 text-red-700 border-red-200', icon: PackageX };
-    if (product.stock <= product.minStock) return { label: 'Low Stock', cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: AlertTriangle };
+    if (!product) return { label: 'Unknown', cls: 'bg-gray-100 text-gray-700 border-gray-200', icon: PackageX };
+    const stock = product.stock || 0;
+    const minStock = product.minStock || 0;
+    if (stock <= 0) return { label: 'Out of Stock', cls: 'bg-red-100 text-red-700 border-red-200', icon: PackageX };
+    if (stock <= minStock) return { label: 'Low Stock', cls: 'bg-amber-50 text-amber-700 border-amber-200', icon: AlertTriangle };
     return { label: 'In Stock', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Check };
   };
 
@@ -441,8 +452,11 @@ const Products: React.FC = () => {
               </thead>
               <tbody>
                 {paginated.map(product => {
+                  if (!product) return null;
                   const badge = getStockBadge(product);
-                  const margin = product.price > 0 ? ((product.price - product.costPrice) / product.price * 100) : 0;
+                  const price = product.price || 0;
+                  const costPrice = product.costPrice || 0;
+                  const margin = price > 0 ? ((price - costPrice) / price * 100) : 0;
                   return (
                     <tr key={product.id} className={`border-b border-gray-50 hover:bg-indigo-50/30 transition-colors ${selectedProducts.has(product.id) ? 'bg-indigo-50/50' : ''}`}>
                       <td className="py-3 px-4">
@@ -474,8 +488,8 @@ const Products: React.FC = () => {
                       <td className="py-3 px-4">
                         <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-medium border border-indigo-100">{product.category}</span>
                       </td>
-                      <td className="py-3 px-4 text-right font-bold text-gray-800 text-sm">Rs. {product.price.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right text-gray-500 text-sm">Rs. {product.costPrice.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-bold text-gray-800 text-sm">Rs. {(product.price || 0).toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right text-gray-500 text-sm">Rs. {(product.costPrice || 0).toLocaleString()}</td>
                       <td className="py-3 px-4 text-center">
                         <span className={`text-xs font-semibold ${margin >= 30 ? 'text-emerald-600' : margin >= 15 ? 'text-amber-600' : 'text-red-500'}`}>
                           {margin.toFixed(1)}%
@@ -520,8 +534,11 @@ const Products: React.FC = () => {
         /* GRID VIEW */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {paginated.map(product => {
+            if (!product) return null;
             const badge = getStockBadge(product);
-            const margin = product.price > 0 ? ((product.price - product.costPrice) / product.price * 100) : 0;
+            const price = product.price || 0;
+            const costPrice = product.costPrice || 0;
+            const margin = price > 0 ? ((price - costPrice) / price * 100) : 0;
             const BadgeIcon = badge.icon;
             return (
               <div
@@ -588,8 +605,8 @@ const Products: React.FC = () => {
 
                   <div className="flex items-end justify-between pt-3 border-t border-gray-100">
                     <div>
-                      <p className="text-lg font-bold text-gray-900">Rs. {product.price.toLocaleString()}</p>
-                      <p className="text-xs text-gray-400">Cost: Rs. {product.costPrice.toLocaleString()}</p>
+                      <p className="text-lg font-bold text-gray-900">Rs. {(product.price || 0).toLocaleString()}</p>
+                      <p className="text-xs text-gray-400">Cost: Rs. {(product.costPrice || 0).toLocaleString()}</p>
                     </div>
                     <div className="text-right">
                       <p className={`text-sm font-semibold ${margin >= 30 ? 'text-emerald-600' : margin >= 15 ? 'text-amber-600' : 'text-red-500'}`}>

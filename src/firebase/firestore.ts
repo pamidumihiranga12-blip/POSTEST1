@@ -83,14 +83,26 @@ export const updateProductStock = async (id: string, newStock: number) => {
 
 export const getProductStats = async () => {
   const snapshot = await getDocs(collection(db, COLLECTIONS.PRODUCTS));
-  const products = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+  const products = snapshot.docs.map(d => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      name: data.name || '',
+      price: Number(data.price) || 0,
+      costPrice: Number(data.costPrice) || 0,
+      stock: Number(data.stock) || 0,
+      minStock: Number(data.minStock) || 0,
+      category: data.category || 'Other',
+    } as Product;
+  });
 
   const totalProducts = products.length;
-  const lowStockCount = products.filter(p => p.stock <= p.minStock && p.stock > 0).length;
-  const outOfStockCount = products.filter(p => p.stock <= 0).length;
-  const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
-  const totalCostValue = products.reduce((sum, p) => sum + (p.costPrice * p.stock), 0);
-  const categories = [...new Set(products.map(p => p.category))];
+  const lowStockCount = products.filter(p => (p.stock || 0) <= (p.minStock || 0) && (p.stock || 0) > 0).length;
+  const outOfStockCount = products.filter(p => (p.stock || 0) <= 0).length;
+  const totalValue = products.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0);
+  const totalCostValue = products.reduce((sum, p) => sum + ((p.costPrice || 0) * (p.stock || 0)), 0);
+  const categories = [...new Set(products.map(p => p.category || 'Other'))];
 
   return {
     totalProducts,
