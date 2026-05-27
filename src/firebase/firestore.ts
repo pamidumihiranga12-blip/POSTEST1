@@ -67,6 +67,41 @@ export const deleteProduct = async (id: string) => {
   await deleteDoc(doc(db, COLLECTIONS.PRODUCTS, id));
 };
 
+export const getProductById = async (id: string) => {
+  const docRef = doc(db, COLLECTIONS.PRODUCTS, id);
+  const snapshot = await getDoc(docRef);
+  if (!snapshot.exists()) return null;
+  return { id: snapshot.id, ...snapshot.data() } as Product;
+};
+
+export const updateProductStock = async (id: string, newStock: number) => {
+  await updateDoc(doc(db, COLLECTIONS.PRODUCTS, id), {
+    stock: Math.max(0, newStock),
+    updatedAt: new Date().toISOString(),
+  });
+};
+
+export const getProductStats = async () => {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.PRODUCTS));
+  const products = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+
+  const totalProducts = products.length;
+  const lowStockCount = products.filter(p => p.stock <= p.minStock && p.stock > 0).length;
+  const outOfStockCount = products.filter(p => p.stock <= 0).length;
+  const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
+  const totalCostValue = products.reduce((sum, p) => sum + (p.costPrice * p.stock), 0);
+  const categories = [...new Set(products.map(p => p.category))];
+
+  return {
+    totalProducts,
+    lowStockCount,
+    outOfStockCount,
+    totalValue,
+    totalCostValue,
+    categoriesCount: categories.length,
+  };
+};
+
 // Customers
 export const getCustomers = async () => {
   const q = query(collection(db, COLLECTIONS.CUSTOMERS), orderBy('name'));
