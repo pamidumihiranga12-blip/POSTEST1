@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePosStore } from '../store/posStore';
-import { getProducts, getProductByBarcode, createInvoice, getVoucherByCode, getCustomers, generateInvoiceNumber } from '../firebase/firestore';
+import {
+  getProducts, getProductByBarcode, createInvoice,
+  getVoucherByCode, getCustomers, generateInvoiceNumber, getInvoiceSettings
+} from '../firebase/firestore';
 import { useAuthStore } from '../store/authStore';
 import { Product, Customer, Voucher } from '../store/posStore';
 import BarcodeScanner from '../components/BarcodeScanner';
 import {
   Search, Barcode, Plus, Minus, Trash2, Tag, User, CreditCard,
-  Banknote, Smartphone, Printer, ShoppingCart, X, CheckCircle, ChevronDown
+  Banknote, Smartphone, Printer, ShoppingCart, X, CheckCircle,
+  ChevronDown, UserCheck, Receipt
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -23,12 +27,18 @@ const Billing: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
+  const [invoiceSettings, setInvoiceSettings] = useState<any>(null);
+  const [cashReceived, setCashReceived] = useState<string>('');
   const { userProfile } = useAuthStore();
-  const { cart, selectedCustomer, appliedVoucher, addToCart, removeFromCart, updateQuantity, updateDiscount, clearCart, setCustomer, setVoucher, getSubtotal, getTotal, getDiscount } = usePosStore();
-  const invoiceRef = useRef<HTMLDivElement>(null);
+  const {
+    cart, selectedCustomer, appliedVoucher, addToCart, removeFromCart,
+    updateQuantity, updateDiscount, clearCart, setCustomer, setVoucher,
+    getSubtotal, getTotal, getDiscount
+  } = usePosStore();
 
   useEffect(() => {
     loadData();
+    loadSettings();
   }, []);
 
   const loadData = async () => {
@@ -36,21 +46,30 @@ const Billing: React.FC = () => {
       const [prods, custs] = await Promise.all([getProducts(), getCustomers()]);
       setProducts(prods);
       setCustomers(custs);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load data');
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const settings = await getInvoiceSettings();
+      setInvoiceSettings(settings);
+    } catch {
+      // use defaults silently
     }
   };
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.barcode.includes(searchQuery) ||
+    p.barcode?.includes(searchQuery) ||
     p.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredCustomers = customers.filter(c =>
     c.name.toLowerCase().includes(customerQuery.toLowerCase()) ||
-    c.phone.includes(customerQuery) ||
-    c.email.toLowerCase().includes(customerQuery.toLowerCase())
+    c.phone?.includes(customerQuery) ||
+    c.email?.toLowerCase().includes(customerQuery.toLowerCase())
   );
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -58,18 +77,13 @@ const Billing: React.FC = () => {
     try {
       const product = await getProductByBarcode(barcode);
       if (product) {
-        if (product.stock <= 0) {
-          toast.error(`${product.name} is out of stock!`);
-          return;
-        }
+        if (product.stock <= 0) { toast.error(`${product.name} is out of stock!`); return; }
         addToCart(product);
         toast.success(`Added: ${product.name}`);
       } else {
         toast.error('Product not found for barcode: ' + barcode);
       }
-    } catch (error) {
-      toast.error('Error scanning barcode');
-    }
+    } catch { toast.error('Error scanning barcode'); }
   };
 
   const applyVoucher = async () => {
@@ -86,9 +100,7 @@ const Billing: React.FC = () => {
       }
       setVoucher(voucher as Voucher);
       toast.success(`Voucher applied! You save ${voucher.type === 'percentage' ? voucher.value + '%' : 'Rs. ' + voucher.value}`);
-    } catch (error) {
-      toast.error('Error applying voucher');
-    }
+    } catch { toast.error('Error applying voucher'); }
   };
 
   const handleCheckout = async () => {
@@ -100,105 +112,268 @@ const Billing: React.FC = () => {
         invoiceNumber,
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name || 'Walk-in Customer',
+        customerPhone: selectedCustomer?.phone || '',
         items: cart,
         subtotal: getSubtotal(),
         discount: getDiscount(),
         tax: 0,
         total: getTotal(),
         paymentMethod,
+        cashReceived: paymentMethod === 'cash' && cashReceived ? Number(cashReceived) : undefined,
+        cashChange: paymentMethod === 'cash' && cashReceived ? Math.max(0, Number(cashReceived) - getTotal()) : undefined,
         voucherId: appliedVoucher?.id,
         status: 'paid' as const,
         createdAt: new Date().toISOString(),
         createdBy: userProfile?.displayName || 'Staff',
+        cashierId: userProfile?.uid || '',
       };
       await createInvoice(invoice);
       setLastInvoice(invoice);
       clearCart();
       setShowSuccess(true);
+      setCashReceived('');
+      // Auto-print after a short delay
+      setTimeout(() => printReceipt(invoice, invoiceSettings), 600);
       await loadData();
-      toast.success('Invoice created successfully!');
-    } catch (error) {
+      toast.success('Invoice created! Printing receipt...');
+    } catch {
       toast.error('Failed to create invoice');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const printReceipt = (invoice: any, settings: any) => {
+    const s = settings || {};
+    const businessName = s.businessName || 'SmartZone POS';
+    const tagline = s.tagline || 'Your Trusted Shopping Destination';
+    const address = s.address || '';
+    const phone = s.phone || '';
+    const email = s.email || '';
+    const thankYou = s.thankYouMessage || 'Thank you for shopping with us!';
+    const returnPolicy = s.returnPolicy || '';
+    const footerNote = s.footerNote || 'Powered by SmartZone POS';
+    const primaryColor = s.primaryColor || '#4f46e5';
+    const logoUrl = s.logoUrl || '';
+
+    const itemsHtml = invoice.items.map((item: any) => `
+      <tr>
+        <td style="padding:3px 0;vertical-align:top;">${item.product.name}${item.discount > 0 ? `<br><small style="color:#666;">-${item.discount}% disc.</small>` : ''}</td>
+        <td style="text-align:center;padding:3px 2px;white-space:nowrap;">${item.quantity}</td>
+        <td style="text-align:right;padding:3px 0;white-space:nowrap;">Rs.${item.product.price.toLocaleString()}</td>
+        <td style="text-align:right;padding:3px 0;font-weight:600;white-space:nowrap;">Rs.${item.total.toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    const payIcons: any = { cash: '💵', card: '💳', mobile: '📱' };
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt - ${invoice.invoiceNumber}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 76mm;
+      margin: 2mm auto;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      color: #111;
+      background: #fff;
+    }
+    .center { text-align: center; }
+    .logo-area { text-align: center; padding: 4mm 0 2mm; }
+    .logo-img { width: 30mm; height: auto; margin-bottom: 2mm; }
+    .business-name {
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: ${primaryColor};
+      text-transform: uppercase;
+    }
+    .tagline { font-size: 9px; color: #555; margin-top: 1mm; }
+    .contact { font-size: 9px; color: #444; margin-top: 1mm; line-height: 1.5; }
+    .divider { border: none; border-top: 1px dashed #999; margin: 2mm 0; }
+    .divider-solid { border: none; border-top: 1px solid #333; margin: 2mm 0; }
+    .section { margin: 1mm 0; }
+    .row { display: flex; justify-content: space-between; align-items: flex-start; margin: 1px 0; }
+    .label { color: #555; }
+    .value { font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { border-bottom: 1px solid #333; }
+    thead th { font-size: 9px; padding: 2px 0; text-align: left; text-transform: uppercase; color: #444; }
+    thead th:nth-child(2) { text-align: center; }
+    thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
+    tbody td { font-size: 10px; color: #222; }
+    tfoot tr { border-top: 1px dashed #999; }
+    tfoot td { padding: 2px 0; }
+    .total-row { font-size: 13px; font-weight: 900; border-top: 1px solid #333; border-bottom: 1px solid #333; }
+    .total-row td { padding: 3px 0; }
+    .badge {
+      display: inline-block;
+      background: ${primaryColor};
+      color: #fff;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .thank-you { text-align: center; margin: 4mm 0 2mm; font-size: 12px; font-weight: 700; color: ${primaryColor}; }
+    .return-policy { text-align: center; font-size: 8px; color: #666; line-height: 1.4; }
+    .footer { text-align: center; font-size: 8px; color: #999; margin-top: 3mm; padding-bottom: 4mm; }
+    .inv-number { font-size: 10px; font-weight: 700; color: ${primaryColor}; }
+    .cashier-badge { background: #f0f0f0; border-radius: 4px; padding: 1px 4px; font-size: 9px; }
+    @media print {
+      body { width: 76mm; }
+      button { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="logo-area">
+    ${logoUrl ? `<img class="logo-img" src="${logoUrl}" alt="Logo" onerror="this.style.display='none'">` : ''}
+    <div class="business-name">${businessName}</div>
+    ${tagline ? `<div class="tagline">${tagline}</div>` : ''}
+    <div class="contact">
+      ${address ? address + '<br>' : ''}${phone ? '📞 ' + phone : ''}${email ? ' | ✉ ' + email : ''}
+    </div>
+  </div>
+
+  <hr class="divider-solid">
+
+  <div class="section">
+    <div class="row"><span class="label">RECEIPT</span><span class="inv-number">${invoice.invoiceNumber}</span></div>
+    <div class="row"><span class="label">Date:</span><span>${format(new Date(invoice.createdAt), 'dd/MM/yyyy hh:mm a')}</span></div>
+    <div class="row"><span class="label">Customer:</span><span class="value">${invoice.customerName}</span></div>
+    ${invoice.customerPhone ? `<div class="row"><span class="label">Phone:</span><span>${invoice.customerPhone}</span></div>` : ''}
+    <div class="row"><span class="label">Cashier:</span><span class="cashier-badge">👤 ${invoice.createdBy}</span></div>
+    <div class="row"><span class="label">Payment:</span><span class="badge">${payIcons[invoice.paymentMethod] || ''} ${invoice.paymentMethod.toUpperCase()}</span></div>
+  </div>
+
+  <hr class="divider">
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:42%;">Item</th>
+        <th style="width:10%;text-align:center;">Qty</th>
+        <th style="width:22%;text-align:right;">Price</th>
+        <th style="width:26%;text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsHtml}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="text-align:right;color:#555;font-size:10px;padding-top:3px;">Subtotal:</td>
+        <td style="text-align:right;padding-top:3px;">Rs.${invoice.subtotal.toLocaleString()}</td>
+      </tr>
+      ${invoice.discount > 0 ? `
+      <tr>
+        <td colspan="3" style="text-align:right;color:#059669;">Discount:</td>
+        <td style="text-align:right;color:#059669;">-Rs.${invoice.discount.toLocaleString()}</td>
+      </tr>` : ''}
+      ${invoice.tax > 0 ? `
+      <tr>
+        <td colspan="3" style="text-align:right;color:#555;">Tax:</td>
+        <td style="text-align:right;">Rs.${invoice.tax.toLocaleString()}</td>
+      </tr>` : ''}
+      <tr class="total-row">
+        <td colspan="3" style="text-align:right;">TOTAL:</td>
+        <td style="text-align:right;color:${primaryColor};">Rs.${invoice.total.toLocaleString()}</td>
+      </tr>
+      ${invoice.cashReceived ? `
+      <tr>
+        <td colspan="3" style="text-align:right;color:#555;padding-top:2px;">Cash Received:</td>
+        <td style="text-align:right;padding-top:2px;">Rs.${Number(invoice.cashReceived).toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right;color:#059669;font-weight:700;">Change:</td>
+        <td style="text-align:right;color:#059669;font-weight:700;">Rs.${Number(invoice.cashChange || 0).toLocaleString()}</td>
+      </tr>` : ''}
+    </tfoot>
+  </table>
+
+  <hr class="divider">
+
+  <div class="thank-you">⭐ ${thankYou} ⭐</div>
+  ${returnPolicy ? `<div class="return-policy">${returnPolicy}</div>` : ''}
+  <div class="footer">━━━━━━━━━━━━━━━━━━━━━━<br>${footerNote}<br>🕐 ${format(new Date(invoice.createdAt), 'dd MMM yyyy, hh:mm a')}</div>
+
+  <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=340,height=600,scrollbars=yes');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   };
+
+  const change = paymentMethod === 'cash' && cashReceived
+    ? Math.max(0, Number(cashReceived) - getTotal())
+    : null;
 
   if (showSuccess && lastInvoice) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-10 h-10 text-green-500" />
+      <div className="max-w-lg mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white text-center">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <CheckCircle className="w-9 h-9 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold">Payment Successful!</h2>
+            <p className="text-green-100 text-sm mt-1">Invoice {lastInvoice.invoiceNumber}</p>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">Payment Successful!</h2>
-          <p className="text-gray-500 mb-6">Invoice {lastInvoice.invoiceNumber} has been created</p>
 
-          <div ref={invoiceRef} className="bg-gray-50 rounded-xl p-6 text-left mb-6 border border-gray-100">
-            <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-indigo-600">SmartZone POS</h3>
-              <p className="text-sm text-gray-500">Invoice Receipt</p>
-            </div>
-            <div className="flex justify-between text-sm text-gray-600 mb-4">
-              <div>
-                <p><span className="font-medium">Invoice#:</span> {lastInvoice.invoiceNumber}</p>
-                <p><span className="font-medium">Date:</span> {format(new Date(lastInvoice.createdAt), 'MMM d, yyyy h:mm a')}</p>
-              </div>
-              <div className="text-right">
-                <p><span className="font-medium">Customer:</span> {lastInvoice.customerName}</p>
-                <p><span className="font-medium">Payment:</span> {lastInvoice.paymentMethod}</p>
-              </div>
-            </div>
-            <table className="w-full text-sm mb-4">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 text-gray-600">Item</th>
-                  <th className="text-center py-2 text-gray-600">Qty</th>
-                  <th className="text-right py-2 text-gray-600">Price</th>
-                  <th className="text-right py-2 text-gray-600">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lastInvoice.items.map((item: any, i: number) => (
-                  <tr key={i} className="border-b border-gray-100">
-                    <td className="py-2 text-gray-800">{item.product.name}</td>
-                    <td className="py-2 text-center text-gray-600">{item.quantity}</td>
-                    <td className="py-2 text-right text-gray-600">Rs. {item.product.price.toLocaleString()}</td>
-                    <td className="py-2 text-right font-medium">Rs. {item.total.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="space-y-1.5 text-sm border-t border-gray-200 pt-3">
-              <div className="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span>Rs. {lastInvoice.subtotal.toLocaleString()}</span>
-              </div>
-              {lastInvoice.discount > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Discount</span>
-                  <span>-Rs. {lastInvoice.discount.toLocaleString()}</span>
+          {/* Summary */}
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {[
+                { label: 'Customer', value: lastInvoice.customerName },
+                { label: 'Cashier', value: lastInvoice.createdBy },
+                { label: 'Payment', value: lastInvoice.paymentMethod.toUpperCase() },
+                { label: 'Items', value: lastInvoice.items.length + ' item(s)' },
+              ].map(d => (
+                <div key={d.label} className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs text-gray-400 mb-0.5">{d.label}</p>
+                  <p className="font-semibold text-gray-800 text-sm">{d.value}</p>
                 </div>
-              )}
-              <div className="flex justify-between text-lg font-bold text-gray-800 border-t border-gray-200 pt-2">
-                <span>Total</span>
-                <span>Rs. {lastInvoice.total.toLocaleString()}</span>
-              </div>
+              ))}
             </div>
-            <p className="text-center text-xs text-gray-400 mt-4">Thank you for shopping at SmartZone!</p>
-          </div>
 
-          <div className="flex gap-3">
-            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 py-3 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
-              <Printer className="w-4 h-4" /> Print Receipt
-            </button>
-            <button onClick={() => setShowSuccess(false)} className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-violet-700 transition-all">
-              New Sale
-            </button>
+            <div className="bg-indigo-50 rounded-xl p-4 mb-5 flex items-center justify-between">
+              <span className="font-medium text-gray-700">Total Charged</span>
+              <span className="text-2xl font-bold text-indigo-600">Rs. {lastInvoice.total.toLocaleString()}</span>
+            </div>
+            {lastInvoice.cashReceived && (
+              <div className="bg-green-50 rounded-xl p-3 mb-4 flex items-center justify-between text-sm">
+                <span className="text-gray-600">Cash Received: <strong>Rs. {Number(lastInvoice.cashReceived).toLocaleString()}</strong></span>
+                <span className="text-green-700 font-bold">Change: Rs. {Number(lastInvoice.cashChange || 0).toLocaleString()}</span>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => printReceipt(lastInvoice, invoiceSettings)}
+                className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-indigo-200 rounded-xl text-indigo-600 hover:bg-indigo-50 transition-colors font-medium"
+              >
+                <Printer className="w-5 h-5" /> Reprint Receipt
+              </button>
+              <button
+                onClick={() => setShowSuccess(false)}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-violet-700 transition-all shadow-lg"
+              >
+                New Sale
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -206,13 +381,23 @@ const Billing: React.FC = () => {
   }
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-8rem)]">
+    <div className="flex gap-5 h-[calc(100vh-8rem)]">
       {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} />}
 
-      {/* Product Search */}
+      {/* LEFT: Product Search Panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">Billing / POS</h1>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-2xl font-bold text-gray-800">Billing / POS</h1>
+            {/* Cashier Badge */}
+            <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1.5">
+              <UserCheck className="w-4 h-4 text-indigo-500" />
+              <div>
+                <p className="text-xs text-gray-400">Cashier</p>
+                <p className="text-sm font-semibold text-indigo-700 leading-tight">{userProfile?.displayName || 'Staff'}</p>
+              </div>
+            </div>
+          </div>
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -220,7 +405,7 @@ const Billing: React.FC = () => {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm"
-                placeholder="Search products by name, barcode, or category..."
+                placeholder="Search by name, barcode, or category..."
               />
             </div>
             <button
@@ -244,18 +429,22 @@ const Billing: React.FC = () => {
                   addToCart(product);
                   toast.success(`Added ${product.name}`);
                 }}
-                className="bg-white rounded-xl p-4 border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all text-left group"
+                className="bg-white rounded-xl p-4 border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all text-left group relative"
               >
+                {product.stock <= 0 && (
+                  <span className="absolute top-2 right-2 bg-red-100 text-red-500 text-xs px-1.5 py-0.5 rounded-full font-medium">Out</span>
+                )}
+                {product.stock > 0 && product.stock <= product.minStock && (
+                  <span className="absolute top-2 right-2 bg-orange-100 text-orange-500 text-xs px-1.5 py-0.5 rounded-full font-medium">Low</span>
+                )}
                 <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center mb-3 group-hover:bg-indigo-100 transition-colors">
                   <ShoppingCart className="w-5 h-5 text-indigo-500" />
                 </div>
                 <p className="font-semibold text-gray-800 text-sm line-clamp-1">{product.name}</p>
-                <p className="text-xs text-gray-400 mb-2">{product.category}</p>
-                <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400 mb-1">{product.category}</p>
+                <div className="flex items-center justify-between mt-1">
                   <span className="text-indigo-600 font-bold text-sm">Rs. {product.price.toLocaleString()}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${product.stock <= product.minStock ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
-                    {product.stock <= 0 ? 'Out' : `${product.stock} left`}
-                  </span>
+                  <span className="text-xs text-gray-400">{product.stock} left</span>
                 </div>
               </button>
             ))}
@@ -269,16 +458,20 @@ const Billing: React.FC = () => {
         </div>
       </div>
 
-      {/* Cart / Order Panel */}
+      {/* RIGHT: Cart Panel */}
       <div className="w-96 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        {/* Cart Header */}
+        <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-indigo-600 to-violet-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-indigo-600" />
-            <h2 className="font-semibold text-gray-800">Current Order</h2>
+            <Receipt className="w-5 h-5" />
+            <h2 className="font-semibold">Current Order</h2>
+            {cart.length > 0 && (
+              <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full font-bold">{cart.length}</span>
+            )}
           </div>
           {cart.length > 0 && (
-            <button onClick={clearCart} className="text-red-400 hover:text-red-500 text-xs flex items-center gap-1">
-              <X className="w-3 h-3" /> Clear
+            <button onClick={clearCart} className="text-white/70 hover:text-white text-xs flex items-center gap-1 transition-colors">
+              <X className="w-3.5 h-3.5" /> Clear
             </button>
           )}
         </div>
@@ -288,10 +481,10 @@ const Billing: React.FC = () => {
           <div className="relative">
             <button
               onClick={() => setShowCustomerSearch(!showCustomerSearch)}
-              className="w-full flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm hover:border-indigo-300 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-sm hover:border-indigo-300 transition-colors bg-gray-50"
             >
               <User className="w-4 h-4 text-gray-400" />
-              <span className="flex-1 text-left text-gray-600">{selectedCustomer?.name || 'Walk-in Customer'}</span>
+              <span className="flex-1 text-left text-gray-700 font-medium">{selectedCustomer?.name || 'Walk-in Customer'}</span>
               <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
             {showCustomerSearch && (
@@ -310,7 +503,7 @@ const Billing: React.FC = () => {
                     onClick={() => { setCustomer(null); setShowCustomerSearch(false); }}
                     className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
                   >
-                    Walk-in Customer
+                    👤 Walk-in Customer
                   </button>
                   {filteredCustomers.map(c => (
                     <button
@@ -334,16 +527,17 @@ const Billing: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-32 text-gray-400">
               <ShoppingCart className="w-8 h-8 mb-2 opacity-30" />
               <p className="text-sm">Cart is empty</p>
+              <p className="text-xs text-gray-300 mt-1">Click products to add</p>
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.product.id} className="bg-gray-50 rounded-xl p-3">
+              <div key={item.product.id} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{item.product.name}</p>
                     <p className="text-xs text-gray-400">Rs. {item.product.price.toLocaleString()} each</p>
                   </div>
-                  <button onClick={() => removeFromCart(item.product.id)} className="text-red-400 hover:text-red-500 ml-2">
+                  <button onClick={() => removeFromCart(item.product.id)} className="text-red-400 hover:text-red-500 ml-2 p-0.5 hover:bg-red-50 rounded">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -355,7 +549,7 @@ const Billing: React.FC = () => {
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                    <span className="w-8 text-center text-sm font-bold text-gray-800">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
                       className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100"
@@ -372,8 +566,9 @@ const Billing: React.FC = () => {
                         onChange={e => updateDiscount(item.product.id, Math.min(100, Math.max(0, Number(e.target.value))))}
                         className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center bg-white"
                         placeholder="0%"
+                        min={0} max={100}
                       />
-                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                     </div>
                     <span className="text-sm font-bold text-indigo-600 w-20 text-right">
                       Rs. {item.total.toLocaleString()}
@@ -385,9 +580,10 @@ const Billing: React.FC = () => {
           )}
         </div>
 
-        {/* Voucher */}
-        <div className="p-3 border-t border-gray-100">
-          <div className="flex gap-2 mb-3">
+        {/* Bottom: Voucher + Summary + Payment */}
+        <div className="p-3 border-t border-gray-100 space-y-3">
+          {/* Voucher */}
+          <div className="flex gap-2">
             <div className="flex-1 relative">
               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -399,36 +595,30 @@ const Billing: React.FC = () => {
               />
             </div>
             {appliedVoucher ? (
-              <button onClick={() => { setVoucher(null); setVoucherCode(''); }} className="px-3 py-2 bg-red-50 text-red-500 rounded-xl text-sm hover:bg-red-100 transition-colors">
-                Remove
-              </button>
+              <button onClick={() => { setVoucher(null); setVoucherCode(''); }} className="px-3 py-2 bg-red-50 text-red-500 rounded-xl text-sm hover:bg-red-100 transition-colors">Remove</button>
             ) : (
-              <button onClick={applyVoucher} className="px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-colors">
-                Apply
-              </button>
+              <button onClick={applyVoucher} className="px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-colors">Apply</button>
             )}
           </div>
 
           {/* Summary */}
-          <div className="space-y-1.5 text-sm mb-3">
-            <div className="flex justify-between text-gray-600">
-              <span>Subtotal</span>
-              <span>Rs. {getSubtotal().toLocaleString()}</span>
+          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between text-gray-500">
+              <span>Subtotal</span><span>Rs. {getSubtotal().toLocaleString()}</span>
             </div>
             {getDiscount() > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Discount</span>
-                <span>-Rs. {getDiscount().toLocaleString()}</span>
+              <div className="flex justify-between text-emerald-600">
+                <span>Discount</span><span>-Rs. {getDiscount().toLocaleString()}</span>
               </div>
             )}
-            <div className="flex justify-between text-lg font-bold text-gray-800 border-t border-gray-100 pt-2">
+            <div className="flex justify-between text-base font-bold text-gray-800 border-t border-gray-200 pt-1.5 mt-1">
               <span>Total</span>
-              <span className="text-indigo-600">Rs. {getTotal().toLocaleString()}</span>
+              <span className="text-indigo-600 text-lg">Rs. {getTotal().toLocaleString()}</span>
             </div>
           </div>
 
           {/* Payment Method */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="grid grid-cols-3 gap-2">
             {[
               { method: 'cash', label: 'Cash', icon: Banknote },
               { method: 'card', label: 'Card', icon: CreditCard },
@@ -437,10 +627,10 @@ const Billing: React.FC = () => {
               <button
                 key={method}
                 onClick={() => setPaymentMethod(method as any)}
-                className={`flex flex-col items-center gap-1 py-2 rounded-xl text-xs font-medium border transition-all ${
+                className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-semibold border-2 transition-all ${
                   paymentMethod === method
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
+                    : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -449,17 +639,38 @@ const Billing: React.FC = () => {
             ))}
           </div>
 
+          {/* Cash calculation */}
+          {paymentMethod === 'cash' && (
+            <div className="space-y-2">
+              <div className="relative">
+                <Banknote className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="number"
+                  value={cashReceived}
+                  onChange={e => setCashReceived(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Cash received from customer..."
+                />
+              </div>
+              {change !== null && change >= 0 && cashReceived && (
+                <div className={`flex justify-between text-sm font-semibold rounded-lg px-3 py-2 ${change >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                  <span>Change to Return:</span>
+                  <span>Rs. {change.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={handleCheckout}
             disabled={loading || cart.length === 0}
-            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold text-sm hover:from-indigo-700 hover:to-violet-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold text-sm hover:from-indigo-700 hover:to-violet-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                Processing...
-              </span>
-            ) : `Charge Rs. ${getTotal().toLocaleString()}`}
+              <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Processing...</>
+            ) : (
+              <><Printer className="w-4 h-4" /> Charge & Print Rs. {getTotal().toLocaleString()}</>
+            )}
           </button>
         </div>
       </div>

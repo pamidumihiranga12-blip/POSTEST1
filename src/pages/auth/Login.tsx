@@ -5,6 +5,8 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase/config';
 import { getUserProfile, createUserProfile, updateUserProfile } from '../../firebase/firestore';
 import { useAuthStore, ADMIN_EMAIL } from '../../store/authStore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 import { Eye, EyeOff, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -16,17 +18,42 @@ interface LoginForm {
 const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { setUser, setUserProfile } = useAuthStore();
+  const { setUser, setUserProfile, setCustomAuth } = useAuthStore();
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>();
 
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      const user = userCredential.user;
+      // Query Firestore for the user profile by email
+      const q = query(collection(db, 'users'), where('email', '==', data.email.trim().toLowerCase()));
+      const snap = await getDocs(q);
       
-      let profile = await getUserProfile(user.uid) as any;
+      let profile: any = null;
+      let isPasswordCorrect = false;
+
+      if (!snap.empty) {
+        profile = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        if (profile.password && profile.password === data.password) {
+          isPasswordCorrect = true;
+        }
+      }
+
+      let user: any = null;
+
+      if (isPasswordCorrect && profile) {
+        user = { uid: profile.uid || profile.id, email: profile.email, displayName: profile.displayName };
+        setCustomAuth(true);
+      } else {
+        // Fallback to standard Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+        user = userCredential.user;
+        setCustomAuth(false);
+      }
+      
+      if (!profile) {
+        profile = await getUserProfile(user.uid) as any;
+      }
       if (!profile) {
         const newProfile = {
           uid: user.uid,

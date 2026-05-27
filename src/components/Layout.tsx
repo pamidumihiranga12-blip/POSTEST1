@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import {
   LayoutDashboard, ShoppingCart, Package, Shield, Ticket,
   Users, FileText, BarChart3, LogOut, Menu,
-  Zap, ChevronDown, Bell, Wifi, WifiOff, ShieldCheck
+  Zap, ChevronDown, Bell, Wifi, WifiOff, ShieldCheck, Settings
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -26,7 +26,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const { userProfile, setUser, setUserProfile, isAdmin } = useAuthStore();
+  const { userProfile, setUser, setUserProfile, isAdmin, setCustomAuth } = useAuthStore();
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -45,6 +45,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await signOut(auth);
       setUser(null);
       setUserProfile(null);
+      setCustomAuth(false);
       navigate('/login');
       toast.success('Signed out successfully');
     } catch (error) {
@@ -53,7 +54,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   const allNavItems = isAdmin()
-    ? [...navItems, { path: '/admin', label: 'Admin Panel', icon: ShieldCheck }]
+    ? [...navItems,
+        { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
+        { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
+      ]
     : navItems;
 
   const NavItem = ({ path, label, icon: Icon }: { path: string; label: string; icon: any }) => (

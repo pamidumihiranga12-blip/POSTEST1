@@ -323,3 +323,31 @@ export const getDashboardStats = async () => {
     lowStockProducts: lowStockProducts.slice(0, 5),
   };
 };
+
+// Invoice Settings
+export const DEFAULT_INVOICE_SETTINGS = {
+  businessName: 'SmartZone POS',
+  tagline: 'Your Trusted Shopping Destination',
+  address: '123 Main Street, City',
+  phone: '+94 77 123 4567',
+  email: 'info@smartzone.lk',
+  website: 'www.smartzone.lk',
+  thankYouMessage: 'Thank you for shopping with us!',
+  returnPolicy: 'Returns accepted within 7 days with receipt.',
+  footerNote: 'Powered by SmartZone POS',
+  showLogo: true,
+  showBarcode: false,
+  primaryColor: '#4f46e5',
+  logoUrl: '',
+};
+
+export const getInvoiceSettings = async () => {
+  const docRef = doc(db, 'settings', 'invoice');
+  const snapshot = await getDoc(docRef);
+  if (!snapshot.exists()) return DEFAULT_INVOICE_SETTINGS;
+  return { ...DEFAULT_INVOICE_SETTINGS, ...snapshot.data() };
+};
+
+export const saveInvoiceSettings = async (settings: typeof DEFAULT_INVOICE_SETTINGS) => {
+  await setDoc(doc(db, 'settings', 'invoice'), settings);
+};

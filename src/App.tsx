@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase/config';
-import { getUserProfile, createUserProfile } from './firebase/firestore';
+import { getUserProfile, createUserProfile, updateUserProfile } from './firebase/firestore';
 import { useAuthStore, ADMIN_EMAIL } from './store/authStore';
 
 // Auth Pages
@@ -23,6 +23,7 @@ import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
 import AdminPanel from './pages/AdminPanel';
 import Profile from './pages/Profile';
+import InvoiceSettings from './pages/InvoiceSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
@@ -59,6 +60,12 @@ function App() {
   const { setUser, setUserProfile, setLoading } = useAuthStore();
 
   useEffect(() => {
+    const state = useAuthStore.getState();
+    if (state.isCustomAuth && state.user && state.userProfile) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -75,6 +82,10 @@ function App() {
             };
             await createUserProfile(firebaseUser.uid, newProfile);
             profile = newProfile;
+          }
+          if (profile.email === ADMIN_EMAIL && !profile.isActive) {
+            profile.isActive = true;
+            await updateUserProfile(firebaseUser.uid, { isActive: true });
           }
           setUserProfile(profile);
         } catch (error) {
@@ -129,6 +140,7 @@ function App() {
 
         {/* Admin Only */}
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
+        <Route path="/invoice-settings" element={<AdminRoute><InvoiceSettings /></AdminRoute>} />
 
         {/* Default */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

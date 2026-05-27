@@ -37,6 +37,7 @@ const Register: React.FC = () => {
         email: data.email,
         displayName: data.displayName,
         phone: data.phone,
+        password: data.password,
         role: 'user',
         isActive: true,
       });
