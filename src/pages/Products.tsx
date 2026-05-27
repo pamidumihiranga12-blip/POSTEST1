@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getProducts, addProduct, updateProduct, deleteProduct, updateProductStock, getProductStats, getSuppliers, adjustSupplierBalance } from '../firebase/firestore';
+import { getProducts, addProduct, updateProduct, deleteProduct, updateProductStock, getProductStats, getSuppliers, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings } from '../firebase/firestore';
 import { Product, Supplier } from '../store/posStore';
+import { format } from 'date-fns';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { useForm } from 'react-hook-form';
 import {
   Plus, Search, Barcode, Edit2, Trash2, Package, X,
-  AlertTriangle, Save, Grid3X3, List, TrendingUp,
-  ArrowUpDown, ChevronLeft, ChevronRight, Minus,
-  LayoutGrid, DollarSign, PackageX, Tag, Filter,
-  RefreshCw, MoreVertical, Eye, PackagePlus, Check,
-  Image as LucideImage, ImageIcon, User
+  AlertTriangle, Save, List, TrendingUp,
+  ArrowUpDown, ChevronLeft, ChevronRight,
+  LayoutGrid, DollarSign, PackageX, Tag,
+  RefreshCw, MoreVertical, PackagePlus, Check,
+  Image as LucideImage, ImageIcon, User, Wallet,
+  CreditCard, Banknote, Smartphone, Printer,
+  ToggleLeft, ToggleRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -57,6 +60,18 @@ const Products: React.FC = () => {
   const [adjustIsPaidInFull, setAdjustIsPaidInFull] = useState<boolean>(true);
   const [adjustAmountPaid, setAdjustAmountPaid] = useState<number>(0);
 
+  // Supplier Payment Modal states
+  const [showSupplierPayModal, setShowSupplierPayModal] = useState<boolean>(false);
+  const [payModalSupplierId, setPayModalSupplierId] = useState<string>('');
+  const [payModalProductName, setPayModalProductName] = useState<string>('');
+  const [payModalCostPrice, setPayModalCostPrice] = useState<number>(0);
+  const [payModalUnits, setPayModalUnits] = useState<number>(1);
+  const [payModalManualMode, setPayModalManualMode] = useState<boolean>(false);
+  const [payModalManualAmount, setPayModalManualAmount] = useState<number>(0);
+  const [payModalPaymentMethod, setPayModalPaymentMethod] = useState<string>('cash');
+  const [payModalNote, setPayModalNote] = useState<string>('');
+  const [payModalProcessing, setPayModalProcessing] = useState<boolean>(false);
+
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>();
 
   const generateNextBarcode = useCallback(() => {
@@ -74,12 +89,12 @@ const Products: React.FC = () => {
   const watchCostPrice = watch('costPrice');
   const watchImageUrl = watch('imageUrl');
 
-  useEffect(() => { loadProducts(); }, []);
+  useEffect(() => { loadProducts(); loadSuppliersData(); }, []);
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterCategory, filterStock]);
 
   // Close dropdown on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = () => {
       if (activeDropdown) setActiveDropdown(null);
     };
     document.addEventListener('click', handler);
@@ -94,6 +109,13 @@ const Products: React.FC = () => {
       setStats(statsData);
     } catch (error) { toast.error('Failed to load products'); }
     finally { setLoading(false); }
+  };
+
+  const loadSuppliersData = async () => {
+    try {
+      const data = await getSuppliers();
+      setSuppliers(data);
+    } catch (error) { console.error('Failed to load suppliers'); }
   };
 
 
@@ -150,6 +172,7 @@ const Products: React.FC = () => {
   const onSubmit = async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
     setSaving(true);
     try {
+      const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
       const productData = {
         ...data,
         price: Number(data.price),
@@ -157,20 +180,234 @@ const Products: React.FC = () => {
         stock: Number(data.stock),
         minStock: Number(data.minStock),
         warrantyMonths: Number(data.warrantyMonths || 0),
+        supplierId: selectedSupplierId || undefined,
+        supplierName: selectedSupplier?.name || undefined,
       };
+
       if (editingProduct) {
         await updateProduct(editingProduct.id, productData);
         toast.success('Product updated successfully!');
       } else {
         await addProduct(productData as any);
         toast.success('Product added successfully!');
+
+        // If supplier selected and not paid in full, add unpaid balance
+        if (selectedSupplierId && !isPaidInFull) {
+          const totalCost = Number(data.costPrice) * Number(data.stock);
+          const unpaidAmount = totalCost - amountPaid;
+          if (unpaidAmount > 0) {
+            await adjustSupplierBalance(selectedSupplierId, unpaidAmount);
+            toast.success(`Rs. ${unpaidAmount.toLocaleString()} added to ${selectedSupplier?.name}'s outstanding balance`);
+          }
+        }
       }
       setShowForm(false);
       setEditingProduct(null);
       reset();
+      setSelectedSupplierId('');
+      setIsPaidInFull(true);
+      setAmountPaid(0);
       loadProducts();
+      loadSuppliersData();
     } catch (error) { toast.error('Failed to save product'); }
     finally { setSaving(false); }
+  };
+
+  // Open supplier payment modal
+  const openSupplierPayModal = (supplierId: string, productName?: string, costPrice?: number) => {
+    setPayModalSupplierId(supplierId);
+    setPayModalProductName(productName || '');
+    setPayModalCostPrice(costPrice || 0);
+    setPayModalUnits(1);
+    setPayModalManualMode(false);
+    setPayModalManualAmount(0);
+    setPayModalPaymentMethod('cash');
+    setPayModalNote('');
+    setShowSupplierPayModal(true);
+  };
+
+  // Calculate payment amount
+  const payModalAutoAmount = payModalCostPrice * payModalUnits;
+  const payModalFinalAmount = payModalManualMode ? payModalManualAmount : payModalAutoAmount;
+
+  // Handle supplier payment
+  const handleSupplierPayment = async () => {
+    if (payModalFinalAmount <= 0) {
+      toast.error('Payment amount must be greater than 0');
+      return;
+    }
+    const supplier = suppliers.find(s => s.id === payModalSupplierId);
+    if (!supplier) {
+      toast.error('Supplier not found');
+      return;
+    }
+
+    setPayModalProcessing(true);
+    try {
+      const invoiceNumber = generateSupplierInvoiceNumber();
+
+      // 1. Reduce supplier balance
+      await adjustSupplierBalance(payModalSupplierId, -payModalFinalAmount);
+
+      // 2. Record the payment transaction
+      await addSupplierPayment({
+        supplierId: payModalSupplierId,
+        supplierName: supplier.name,
+        supplierCompany: supplier.company || undefined,
+        productName: payModalProductName || undefined,
+        unitsPaid: payModalManualMode ? 0 : payModalUnits,
+        costPerUnit: payModalCostPrice,
+        totalAmount: payModalFinalAmount,
+        paymentMethod: payModalPaymentMethod,
+        note: payModalNote || undefined,
+        invoiceNumber,
+        createdAt: new Date().toISOString(),
+      });
+
+      // 3. Generate and print the 80mm invoice
+      await generateSupplierInvoice({
+        invoiceNumber,
+        supplier,
+        productName: payModalProductName,
+        unitsPaid: payModalManualMode ? 0 : payModalUnits,
+        costPerUnit: payModalCostPrice,
+        totalAmount: payModalFinalAmount,
+        paymentMethod: payModalPaymentMethod,
+        previousBalance: supplier.balance,
+        newBalance: supplier.balance - payModalFinalAmount,
+        note: payModalNote,
+      });
+
+      toast.success(`Rs. ${payModalFinalAmount.toLocaleString()} paid to ${supplier.name}`);
+      setShowSupplierPayModal(false);
+      loadSuppliersData();
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Failed to process payment');
+    } finally {
+      setPayModalProcessing(false);
+    }
+  };
+
+  // Generate and print 80mm supplier payment invoice
+  const generateSupplierInvoice = async (data: {
+    invoiceNumber: string;
+    supplier: Supplier;
+    productName: string;
+    unitsPaid: number;
+    costPerUnit: number;
+    totalAmount: number;
+    paymentMethod: string;
+    previousBalance: number;
+    newBalance: number;
+    note: string;
+  }) => {
+    let settings: any;
+    try {
+      settings = await getInvoiceSettings();
+    } catch {
+      settings = { businessName: 'SmartZone POS', address: '', phone: '', email: '', primaryColor: '#4f46e5', logoUrl: '', footerNote: 'Powered by SmartZone POS' };
+    }
+
+    const now = new Date();
+    const dateStr = format(now, 'dd/MM/yyyy hh:mm a');
+    const payMethodLabel = data.paymentMethod === 'cash' ? '💵 CASH' : data.paymentMethod === 'card' ? '💳 CARD' : '📱 MOBILE';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: 80mm auto; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:'Courier New',monospace; font-size:11px; color:#111; }
+  .center { text-align:center; }
+  .name { font-size:16px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:1px; }
+  .tagline { font-size:10px; color:${settings.primaryColor}; margin-top:2mm; font-weight:700; letter-spacing:0.5px; }
+  .contact { font-size:9px; color:#444; margin-top:1mm; line-height:1.5; }
+  hr { border:none; border-top:1px dashed #999; margin:2mm 0; }
+  .solid { border-top:1px solid #333; }
+  .row { display:flex; justify-content:space-between; margin:1px 0; font-size:10px; }
+  .lbl { color:#555; }
+  .val { font-weight:700; }
+  .section-title { font-size:10px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:0.5px; margin:2mm 0 1mm; }
+  .amount-box { background:#f5f5f5; border:1px solid #ddd; border-radius:4px; padding:3mm 2mm; text-align:center; margin:2mm 0; }
+  .amount-label { font-size:9px; color:#666; }
+  .amount-value { font-size:18px; font-weight:900; color:${settings.primaryColor}; }
+  .balance-row { display:flex; justify-content:space-between; padding:1.5mm 0; font-size:10px; }
+  .badge { display:inline-block; background:${settings.primaryColor}; color:#fff; font-size:9px; padding:1px 5px; border-radius:10px; font-weight:700; }
+  .footer { text-align:center; font-size:8px; color:#999; margin-top:3mm; }
+  .paid-stamp { text-align:center; font-size:14px; font-weight:900; color:#059669; border:2px solid #059669; border-radius:6px; padding:2mm 4mm; margin:3mm auto; display:inline-block; text-transform:uppercase; letter-spacing:1px; }
+</style>
+</head>
+<body>
+  <div class="center" style="padding:4mm 0 2mm;">
+    ${settings.logoUrl ? `<img src="${settings.logoUrl}" style="width:28mm;height:auto;margin-bottom:2mm;" onerror="this.style.display='none'">` : ''}
+    <div class="name">${settings.businessName}</div>
+    <div class="tagline">SUPPLIER PAYMENT RECEIPT</div>
+    <div class="contact">
+      ${settings.address ? settings.address + '<br>' : ''}
+      ${settings.phone ? '📞 ' + settings.phone : ''}
+      ${settings.email ? ' | ✉ ' + settings.email : ''}
+    </div>
+  </div>
+  <hr class="solid">
+
+  <div style="margin:1mm 0;">
+    <div class="row"><span class="lbl">Invoice #</span><span style="font-weight:700;color:${settings.primaryColor};">${data.invoiceNumber}</span></div>
+    <div class="row"><span class="lbl">Date:</span><span>${dateStr}</span></div>
+    <div class="row"><span class="lbl">Payment:</span><span class="badge">${payMethodLabel}</span></div>
+  </div>
+  <hr>
+
+  <div class="section-title">Supplier Details</div>
+  <div class="row"><span class="lbl">Name:</span><span class="val">${data.supplier.name}</span></div>
+  ${data.supplier.company ? `<div class="row"><span class="lbl">Company:</span><span>${data.supplier.company}</span></div>` : ''}
+  ${data.supplier.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${data.supplier.phone}</span></div>` : ''}
+  <hr>
+
+  ${data.productName ? `
+  <div class="section-title">Product Details</div>
+  <div class="row"><span class="lbl">Product:</span><span class="val">${data.productName}</span></div>
+  ${data.unitsPaid > 0 ? `
+  <div class="row"><span class="lbl">Units Paid:</span><span>${data.unitsPaid}</span></div>
+  <div class="row"><span class="lbl">Cost/Unit:</span><span>Rs. ${data.costPerUnit.toLocaleString()}</span></div>
+  ` : ''}
+  <hr>
+  ` : ''}
+
+  <div class="amount-box">
+    <div class="amount-label">AMOUNT PAID</div>
+    <div class="amount-value">Rs. ${data.totalAmount.toLocaleString()}</div>
+  </div>
+
+  <div class="section-title">Balance Summary</div>
+  <div class="balance-row" style="color:#666;"><span>Previous Balance:</span><span>Rs. ${data.previousBalance.toLocaleString()}</span></div>
+  <div class="balance-row" style="color:#059669;font-weight:700;"><span>Amount Paid:</span><span>- Rs. ${data.totalAmount.toLocaleString()}</span></div>
+  <hr class="solid">
+  <div class="balance-row" style="font-weight:900;font-size:12px;"><span>New Balance:</span><span style="color:${data.newBalance > 0 ? '#ef4444' : '#059669'};">Rs. ${Math.max(0, data.newBalance).toLocaleString()}</span></div>
+
+  ${data.note ? `
+  <hr>
+  <div style="font-size:9px;color:#555;text-align:center;margin:1mm 0;">Note: ${data.note}</div>
+  ` : ''}
+
+  <div class="center" style="margin:3mm 0;">
+    <div class="paid-stamp">✓ PAID</div>
+  </div>
+
+  <hr>
+  <div class="footer">${settings.footerNote || 'Powered by SmartZone POS'}</div>
+  <div class="footer" style="margin-top:1mm;">Generated: ${dateStr}</div>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank', 'width=350,height=600');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); }, 400);
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -199,10 +436,25 @@ const Products: React.FC = () => {
     if (!showStockModal) return;
     try {
       await updateProductStock(showStockModal.id, showStockModal.stock + stockAdjust);
+
+      // Handle supplier balance for stock additions
+      if (stockAdjust > 0 && adjustSupplierId) {
+        if (!adjustIsPaidInFull) {
+          const totalCost = showStockModal.costPrice * stockAdjust;
+          const unpaidAmount = totalCost - adjustAmountPaid;
+          if (unpaidAmount > 0) {
+            await adjustSupplierBalance(adjustSupplierId, unpaidAmount);
+            const supplier = suppliers.find(s => s.id === adjustSupplierId);
+            toast.success(`Rs. ${unpaidAmount.toLocaleString()} added to ${supplier?.name}'s balance`);
+          }
+        }
+      }
+
       toast.success('Stock updated!');
       setShowStockModal(null);
       setStockAdjust(0);
       loadProducts();
+      loadSuppliersData();
     } catch (error) { toast.error('Failed to update stock'); }
   };
 
@@ -899,15 +1151,34 @@ const Products: React.FC = () => {
                           <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
                         ))}
                       </select>
-                      {selectedSupplierId && (
-                        <p className="text-[11px] text-violet-600 font-semibold mt-1">
-                          Current Outstanding Balance: Rs. {suppliers.find(s => s.id === selectedSupplierId)?.balance.toLocaleString() || 0}
-                        </p>
-                      )}
+                      {selectedSupplierId && (() => {
+                        const selSupplier = suppliers.find(s => s.id === selectedSupplierId);
+                        const balance = selSupplier?.balance || 0;
+                        return (
+                          <div className="mt-2 flex items-center justify-between">
+                            <p className={`text-[11px] font-semibold ${balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                              Outstanding Balance: Rs. {balance.toLocaleString()}
+                            </p>
+                            {balance > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => openSupplierPayModal(
+                                  selectedSupplierId,
+                                  watch('name') || '',
+                                  Number(watchCostPrice) || 0
+                                )}
+                                className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-[10px] font-semibold hover:from-emerald-600 hover:to-teal-600 shadow-sm transition-all hover:scale-[1.03] active:scale-[0.97]"
+                              >
+                                <Wallet className="w-3 h-3" /> Make Payment
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     {selectedSupplierId && (
                       <div className="space-y-3">
-                        <label className="block text-sm font-medium text-gray-700">Payment Status</label>
+                        <label className="block text-sm font-medium text-gray-700">Payment Status for This Purchase</label>
                         <div className="flex gap-3">
                           <button
                             type="button"
@@ -921,11 +1192,11 @@ const Products: React.FC = () => {
                             onClick={() => setIsPaidInFull(false)}
                             className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${!isPaidInFull ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}
                           >
-                            Partial Payment
+                            Not Paid / Partial
                           </button>
                         </div>
                         {!isPaidInFull && (
-                          <div>
+                          <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (Rs.)</label>
                             <input
                               type="number"
@@ -935,7 +1206,28 @@ const Products: React.FC = () => {
                               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                               placeholder="0"
                             />
-                            <p className="text-xs text-amber-600 mt-1">Remaining unpaid balance will be added to the supplier\'s outstanding amount.</p>
+                            {(() => {
+                              const totalCost = (Number(watchCostPrice) || 0) * (Number(watch('stock')) || 0);
+                              const unpaid = totalCost - amountPaid;
+                              return totalCost > 0 ? (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                  <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                    <span>Total Purchase Cost:</span>
+                                    <span className="font-semibold">Rs. {totalCost.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                    <span>Amount Paid:</span>
+                                    <span className="font-semibold text-emerald-600">Rs. {amountPaid.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs font-bold text-red-600 pt-1 border-t border-amber-200">
+                                    <span>Unpaid (Added to Balance):</span>
+                                    <span>Rs. {Math.max(0, unpaid).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-amber-600">Enter cost price and stock to see unpaid calculation.</p>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
@@ -1122,6 +1414,219 @@ const Products: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ═══ SUPPLIER PAYMENT MODAL ═══ */}
+      {showSupplierPayModal && (() => {
+        const paySupplier = suppliers.find(s => s.id === payModalSupplierId);
+        if (!paySupplier) return null;
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowSupplierPayModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl">
+                    <Wallet className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-800">Pay Supplier</h2>
+                    <p className="text-xs text-gray-400">Make a payment to {paySupplier.name}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowSupplierPayModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-5">
+                {/* Supplier Info */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-sm">
+                      {paySupplier.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 text-sm">{paySupplier.name}</p>
+                      <p className="text-xs text-violet-600 font-medium">{paySupplier.company || 'Independent Supplier'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-200">
+                    <span className="text-xs text-gray-500">Outstanding Balance</span>
+                    <span className={`text-lg font-bold ${paySupplier.balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                      Rs. {paySupplier.balance.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mode Toggle */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Calculation Mode</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayModalManualMode(!payModalManualMode);
+                      if (!payModalManualMode) {
+                        setPayModalManualAmount(payModalAutoAmount);
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                      payModalManualMode
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    }`}
+                  >
+                    {payModalManualMode ? (
+                      <><ToggleRight className="w-4 h-4" /> Manual Amount</>
+                    ) : (
+                      <><ToggleLeft className="w-4 h-4" /> Auto (Unit-Based)</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Unit-based Calculation */}
+                {!payModalManualMode ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Number of Units to Pay</label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPayModalUnits(u => Math.max(1, u - 1))}
+                          className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-500 transition-all text-lg font-bold"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={payModalUnits}
+                          onChange={e => setPayModalUnits(Math.max(1, Number(e.target.value)))}
+                          className="flex-1 text-center text-xl font-bold border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none py-1 bg-transparent text-gray-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPayModalUnits(u => u + 1)}
+                          className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-500 transition-all text-lg font-bold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1">
+                      <div className="flex justify-between text-xs text-gray-600">
+                        <span>Cost per Unit:</span>
+                        <span className="font-semibold">Rs. {payModalCostPrice.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-600">
+                        <span>Units:</span>
+                        <span className="font-semibold">× {payModalUnits}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold text-emerald-700 pt-1 border-t border-emerald-200">
+                        <span>Total Payment:</span>
+                        <span>Rs. {payModalAutoAmount.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Manual Amount */
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Amount (Rs.)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={payModalManualAmount}
+                      onChange={e => setPayModalManualAmount(Number(e.target.value))}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-lg font-bold text-center"
+                      placeholder="0"
+                    />
+                  </div>
+                )}
+
+                {/* Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'cash', label: 'Cash', Icon: Banknote },
+                      { key: 'card', label: 'Card', Icon: CreditCard },
+                      { key: 'mobile', label: 'Mobile', Icon: Smartphone },
+                    ].map(({ key, label, Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setPayModalPaymentMethod(key)}
+                        className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all text-xs font-medium ${
+                          payModalPaymentMethod === key
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Note (Optional)</label>
+                  <input
+                    type="text"
+                    value={payModalNote}
+                    onChange={e => setPayModalNote(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    placeholder="e.g. Monthly payment installment"
+                  />
+                </div>
+
+                {/* Summary */}
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4">
+                  <div className="flex justify-between text-sm text-gray-600 mb-1">
+                    <span>Current Balance:</span>
+                    <span className="font-semibold">Rs. {paySupplier.balance.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-emerald-600 font-semibold mb-1">
+                    <span>Payment Amount:</span>
+                    <span>- Rs. {payModalFinalAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold text-gray-800 pt-2 border-t border-emerald-200">
+                    <span>New Balance:</span>
+                    <span className={paySupplier.balance - payModalFinalAmount > 0 ? 'text-red-500' : 'text-emerald-600'}>
+                      Rs. {Math.max(0, paySupplier.balance - payModalFinalAmount).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowSupplierPayModal(false)}
+                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSupplierPayment}
+                    disabled={payModalProcessing || payModalFinalAmount <= 0}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-sm font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all disabled:opacity-40 shadow-lg shadow-emerald-200"
+                  >
+                    {payModalProcessing ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    {payModalProcessing ? 'Processing...' : 'Pay & Print Invoice'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

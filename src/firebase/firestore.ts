@@ -4,7 +4,7 @@ import {
   setDoc, increment
 } from 'firebase/firestore';
 import { db } from './config';
-import { Product, Customer, Invoice, Voucher, WarrantyClaim, Supplier } from '../store/posStore';
+import { Product, Customer, Invoice, Voucher, WarrantyClaim, Supplier, SupplierPayment } from '../store/posStore';
 
 // Collections
 export const COLLECTIONS = {
@@ -15,6 +15,7 @@ export const COLLECTIONS = {
   VOUCHERS: 'vouchers',
   WARRANTY_CLAIMS: 'warrantyClaims',
   SUPPLIERS: 'suppliers',
+  SUPPLIER_PAYMENTS: 'supplierPayments',
 };
 
 // Generate invoice number
@@ -425,4 +426,41 @@ export const adjustSupplierBalance = async (id: string, amount: number) => {
     balance: increment(amount),
     updatedAt: new Date().toISOString(),
   });
+};
+
+// Supplier Payments
+export const generateSupplierInvoiceNumber = () => {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `SP-${year}${month}${day}-${random}`;
+};
+
+export const addSupplierPayment = async (payment: Omit<SupplierPayment, 'id'>) => {
+  const cleanPayment = stripUndefined({
+    ...payment,
+    createdAt: new Date().toISOString(),
+  });
+  const docRef = await addDoc(collection(db, COLLECTIONS.SUPPLIER_PAYMENTS), cleanPayment);
+  return docRef.id;
+};
+
+export const getSupplierPayments = async (supplierId?: string) => {
+  let q;
+  if (supplierId) {
+    q = query(
+      collection(db, COLLECTIONS.SUPPLIER_PAYMENTS),
+      where('supplierId', '==', supplierId),
+      orderBy('createdAt', 'desc')
+    );
+  } else {
+    q = query(
+      collection(db, COLLECTIONS.SUPPLIER_PAYMENTS),
+      orderBy('createdAt', 'desc')
+    );
+  }
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierPayment));
 };

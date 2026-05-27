@@ -14,6 +14,8 @@ export interface Product {
   description?: string;
   warrantyMonths?: number;
   imageUrl?: string;
+  supplierId?: string;
+  supplierName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +96,22 @@ export interface Supplier {
   balance: number;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCompany?: string;
+  productId?: string;
+  productName?: string;
+  unitsPaid: number;
+  costPerUnit: number;
+  totalAmount: number;
+  paymentMethod: string;
+  note?: string;
+  invoiceNumber: string;
+  createdAt: string;
 }
 
 interface CartState {

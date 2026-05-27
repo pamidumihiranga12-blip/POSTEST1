@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import {
   Settings, Save, RefreshCw, Eye, Building2, Phone, Mail,
-  Globe, FileText, MessageSquare, Palette, Image, CheckCircle, Printer
+  Globe, MessageSquare, Palette, Image, Printer
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';

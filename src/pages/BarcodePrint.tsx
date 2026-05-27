@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getProducts } from '../firebase/firestore';
 import { Product } from '../store/posStore';
-import { Printer, Plus, Minus, Trash2, Search, Settings, Tag, Grid, Layers, Eye, RefreshCw } from 'lucide-react';
+import { Printer, Plus, Minus, Trash2, Search, Settings, Tag, Grid, Layers, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import JsBarcode from 'jsbarcode';
 
