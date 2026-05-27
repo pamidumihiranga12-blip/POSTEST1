@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Barcode } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/library';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
@@ -8,78 +9,41 @@ interface BarcodeScannerProps {
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string>('');
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState('');
-  const streamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number>(0);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
   useEffect(() => {
-    startCamera();
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+
+    reader.decodeFromVideoDevice(undefined, videoRef.current || undefined, (result, err) => {
+      if (result) {
+        onScan(result.getText());
+        reader.reset();
+        onClose();
+      }
+    }).then(() => {
+      setScanning(true);
+    }).catch(err => {
+      console.error('Camera access error:', err);
+      setError('Camera not accessible. Please enter barcode manually.');
+    });
+
     return () => {
-      stopCamera();
+      reader.reset();
     };
   }, []);
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setScanning(true);
-        scanFrame();
-      }
-    } catch (err) {
-      setError('Camera not accessible. Please enter barcode manually.');
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-    }
-  };
-
-  const scanFrame = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.height = video.videoHeight;
-      canvas.width = video.videoWidth;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // In a real app, we'd use a barcode detection library here
-        // For now we'll use the BarcodeDetector API if available
-        if ('BarcodeDetector' in window) {
-          const barcodeDetector = new (window as any).BarcodeDetector();
-          barcodeDetector.detect(canvas).then((barcodes: any[]) => {
-            if (barcodes.length > 0) {
-              onScan(barcodes[0].rawValue);
-              stopCamera();
-              return;
-            }
-          }).catch(() => {});
-        }
-      }
-    }
-    animFrameRef.current = requestAnimationFrame(scanFrame);
-  };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualCode.trim()) {
       onScan(manualCode.trim());
+      if (readerRef.current) {
+        readerRef.current.reset();
+      }
+      onClose();
     }
   };
 
@@ -106,7 +70,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
           ) : (
             <div className="relative rounded-xl overflow-hidden bg-black mb-4" style={{ aspectRatio: '4/3' }}>
               <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-              <canvas ref={canvasRef} className="hidden" />
               {scanning && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-48 h-48 border-2 border-white/70 rounded-lg relative">

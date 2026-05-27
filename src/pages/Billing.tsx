@@ -29,6 +29,7 @@ const Billing: React.FC = () => {
   const [lastInvoice, setLastInvoice] = useState<any>(null);
   const [invoiceSettings, setInvoiceSettings] = useState<any>(null);
   const [cashReceived, setCashReceived] = useState<string>('');
+  const [cashierName, setCashierName] = useState('');
   const { userProfile } = useAuthStore();
   const {
     cart, selectedCustomer, appliedVoucher, addToCart, removeFromCart,
@@ -40,6 +41,14 @@ const Billing: React.FC = () => {
     loadData();
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    if (userProfile?.displayName) {
+      setCashierName(userProfile.displayName);
+    } else {
+      setCashierName('Staff');
+    }
+  }, [userProfile]);
 
   const loadData = async () => {
     try {
@@ -74,6 +83,7 @@ const Billing: React.FC = () => {
 
   const handleBarcodeScanned = async (barcode: string) => {
     setShowScanner(false);
+    setSearchQuery(barcode); // fall into search box
     try {
       const product = await getProductByBarcode(barcode);
       if (product) {
@@ -85,6 +95,46 @@ const Billing: React.FC = () => {
       }
     } catch { toast.error('Error scanning barcode'); }
   };
+
+  // Hardware Scanner detection
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'CapsLock' || e.key === 'Tab' || e.key === 'Backspace' || e.key === 'Escape') {
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        return;
+      }
+
+      if (e.key.length > 1 && e.key !== 'Enter') return;
+
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+      lastKeyTime = currentTime;
+
+      if (timeDiff > 50) {
+        buffer = e.key === 'Enter' ? '' : e.key;
+      } else {
+        if (e.key === 'Enter') {
+          if (buffer.length >= 3) {
+            handleBarcodeScanned(buffer);
+            buffer = '';
+            e.preventDefault();
+          }
+        } else {
+          buffer += e.key;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [products]);
 
   const applyVoucher = async () => {
     if (!voucherCode.trim()) return;
@@ -134,7 +184,7 @@ const Billing: React.FC = () => {
         paymentMethod,
         status: 'paid' as const,
         createdAt: new Date().toISOString(),
-        createdBy: userProfile?.displayName || 'Staff',
+        createdBy: cashierName || 'Staff',
         cashierId: userProfile?.uid || '',
       };
 
@@ -414,11 +464,17 @@ const Billing: React.FC = () => {
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-2xl font-bold text-gray-800">Billing / POS</h1>
             {/* Cashier Badge */}
-            <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1.5">
+            <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1">
               <UserCheck className="w-4 h-4 text-indigo-500" />
               <div>
                 <p className="text-xs text-gray-400">Cashier</p>
-                <p className="text-sm font-semibold text-indigo-700 leading-tight">{userProfile?.displayName || 'Staff'}</p>
+                <input
+                  type="text"
+                  value={cashierName}
+                  onChange={e => setCashierName(e.target.value)}
+                  className="text-sm font-semibold text-indigo-700 bg-transparent border-b border-dashed border-indigo-300 focus:border-indigo-600 focus:outline-none w-28 p-0"
+                  placeholder="Cashier Name"
+                />
               </div>
             </div>
           </div>

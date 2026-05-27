@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getProducts, addProduct, updateProduct, deleteProduct, updateProductStock, getProductStats } from '../firebase/firestore';
-import { Product } from '../store/posStore';
+import { getProducts, addProduct, updateProduct, deleteProduct, updateProductStock, getProductStats, getSuppliers, adjustSupplierBalance } from '../firebase/firestore';
+import { Product, Supplier } from '../store/posStore';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { useForm } from 'react-hook-form';
 import {
@@ -9,7 +9,7 @@ import {
   ArrowUpDown, ChevronLeft, ChevronRight, Minus,
   LayoutGrid, DollarSign, PackageX, Tag, Filter,
   RefreshCw, MoreVertical, Eye, PackagePlus, Check,
-  Image as LucideImage, ImageIcon
+  Image as LucideImage, ImageIcon, User
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -27,6 +27,7 @@ interface ProductStats {
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -47,7 +48,27 @@ const Products: React.FC = () => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [filterStock, setFilterStock] = useState<'all' | 'low' | 'out'>('all');
 
+  // Supplier transaction states
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
+  const [isPaidInFull, setIsPaidInFull] = useState<boolean>(true);
+  const [amountPaid, setAmountPaid] = useState<number>(0);
+
+  const [adjustSupplierId, setAdjustSupplierId] = useState<string>('');
+  const [adjustIsPaidInFull, setAdjustIsPaidInFull] = useState<boolean>(true);
+  const [adjustAmountPaid, setAdjustAmountPaid] = useState<number>(0);
+
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>();
+
+  const generateNextBarcode = useCallback(() => {
+    const numericBarcodes = products
+      .map(p => p.barcode)
+      .filter(b => b && /^\d+$/.test(b))
+      .map(b => parseInt(b, 10));
+
+    const maxVal = numericBarcodes.length > 0 ? Math.max(...numericBarcodes) : 0;
+    const nextVal = maxVal + 1;
+    return nextVal.toString().padStart(3, '0');
+  }, [products]);
 
   const watchPrice = watch('price');
   const watchCostPrice = watch('costPrice');
@@ -75,12 +96,7 @@ const Products: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product);
-    reset(product);
-    setShowForm(true);
-    setActiveDropdown(null);
-  };
+
 
   const handleBarcodeScanned = (barcode: string) => {
     setShowScanner(false);
@@ -89,6 +105,46 @@ const Products: React.FC = () => {
     } else {
       setSearchQuery(barcode);
     }
+  };
+
+  const handleOpenAddForm = () => {
+    setEditingProduct(null);
+    const nextCode = generateNextBarcode();
+    reset({
+      name: '',
+      barcode: nextCode,
+      category: '',
+      price: 0,
+      costPrice: 0,
+      stock: 0,
+      minStock: 5,
+      unit: 'pcs',
+      description: '',
+      warrantyMonths: 0,
+      imageUrl: ''
+    });
+    setSelectedSupplierId('');
+    setIsPaidInFull(true);
+    setAmountPaid(0);
+    setShowForm(true);
+  };
+
+  const handleOpenStockAdjust = (product: Product) => {
+    setShowStockModal(product);
+    setStockAdjust(0);
+    setAdjustSupplierId(product.supplierId || '');
+    setAdjustIsPaidInFull(true);
+    setAdjustAmountPaid(0);
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product);
+    reset(product);
+    setSelectedSupplierId(product.supplierId || '');
+    setIsPaidInFull(true);
+    setAmountPaid(0);
+    setShowForm(true);
+    setActiveDropdown(null);
   };
 
   const onSubmit = async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -252,7 +308,7 @@ const Products: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
-            onClick={() => { setEditingProduct(null); reset({ stock: 0, minStock: 5, warrantyMonths: 0, unit: 'pcs' } as any); setShowForm(true); }}
+            onClick={handleOpenAddForm}
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-sm font-semibold hover:from-indigo-700 hover:to-violet-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:scale-[1.02] active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" /> Add Product
@@ -409,7 +465,7 @@ const Products: React.FC = () => {
           </p>
           {!searchQuery && !filterCategory && filterStock === 'all' && (
             <button
-              onClick={() => { setEditingProduct(null); reset({ stock: 0, minStock: 5, warrantyMonths: 0, unit: 'pcs' } as any); setShowForm(true); }}
+              onClick={handleOpenAddForm}
               className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-sm font-medium hover:from-indigo-700 hover:to-violet-700 transition-all"
             >
               <Plus className="w-4 h-4" /> Add First Product
@@ -498,7 +554,7 @@ const Products: React.FC = () => {
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => { setShowStockModal(product); setStockAdjust(0); }}
+                            onClick={() => handleOpenStockAdjust(product)}
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border cursor-pointer hover:opacity-80 transition-opacity ${badge.cls}`}
                           >
                             {product.stock <= product.minStock && product.stock > 0 && <AlertTriangle className="w-3 h-3" />}
@@ -515,7 +571,7 @@ const Products: React.FC = () => {
                           <button onClick={() => handleEdit(product)} className="p-2 hover:bg-indigo-50 rounded-lg text-indigo-500 transition-colors" title="Edit">
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={() => { setShowStockModal(product); setStockAdjust(0); }} className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-500 transition-colors" title="Adjust Stock">
+                          <button onClick={() => handleOpenStockAdjust(product)} className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-500 transition-colors" title="Adjust Stock">
                             <PackagePlus className="w-4 h-4" />
                           </button>
                           <button onClick={() => setShowDeleteConfirm({ id: product.id, name: product.name })} className="p-2 hover:bg-red-50 rounded-lg text-red-400 transition-colors" title="Delete">
@@ -578,7 +634,7 @@ const Products: React.FC = () => {
                         <button onClick={() => handleEdit(product)} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                           <Edit2 className="w-3.5 h-3.5" /> Edit
                         </button>
-                        <button onClick={() => { setShowStockModal(product); setStockAdjust(0); setActiveDropdown(null); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <button onClick={() => { handleOpenStockAdjust(product); setActiveDropdown(null); }} className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                           <PackagePlus className="w-3.5 h-3.5" /> Adjust Stock
                         </button>
                         <hr className="my-1 border-gray-100" />
@@ -822,6 +878,65 @@ const Products: React.FC = () => {
                 <textarea {...register('description')} rows={3} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none" placeholder="Optional product description..." />
               </div>
 
+              {/* Supplier & Purchase Info Section */}
+              {suppliers.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <User className="w-4 h-4 text-violet-500" /> Supplier &amp; Purchase Info
+                  </h3>
+                  <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier (Optional)</label>
+                      <select
+                        value={selectedSupplierId}
+                        onChange={e => setSelectedSupplierId(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
+                      >
+                        <option value="">-- Select Supplier --</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {selectedSupplierId && (
+                      <div className="space-y-3">
+                        <label className="block text-sm font-medium text-gray-700">Payment Status</label>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setIsPaidInFull(true)}
+                            className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${isPaidInFull ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'}`}
+                          >
+                            Paid in Full
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsPaidInFull(false)}
+                            className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${!isPaidInFull ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}
+                          >
+                            Partial Payment
+                          </button>
+                        </div>
+                        {!isPaidInFull && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (Rs.)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={amountPaid}
+                              onChange={e => setAmountPaid(Number(e.target.value))}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              placeholder="0"
+                            />
+                            <p className="text-xs text-amber-600 mt-1">Remaining unpaid balance will be added to the supplier\'s outstanding amount.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Form Actions */}
               <div className="flex gap-3 pt-3 border-t border-gray-100">
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors">
@@ -858,6 +973,7 @@ const Products: React.FC = () => {
 
               <div className="flex items-center justify-center gap-4 mb-6">
                 <button
+                  type="button"
                   onClick={() => setStockAdjust(a => a - 1)}
                   className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all text-xl font-bold"
                 >
@@ -868,11 +984,12 @@ const Products: React.FC = () => {
                     type="number"
                     value={stockAdjust}
                     onChange={e => setStockAdjust(Number(e.target.value))}
-                    className="w-24 text-center text-2xl font-bold border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none py-1 bg-transparent"
+                    className="w-24 text-center text-2xl font-bold border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none py-1 bg-transparent text-gray-800"
                   />
                   <p className="text-xs text-gray-400 mt-1">adjustment</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setStockAdjust(a => a + 1)}
                   className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-500 hover:bg-emerald-50 transition-all text-xl font-bold"
                 >
@@ -887,14 +1004,70 @@ const Products: React.FC = () => {
                 </p>
               </div>
 
+              {/* Supplier Selection for Stock Adjustment (Only if adding stock) */}
+              {stockAdjust > 0 && suppliers.length > 0 && (
+                <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier (Optional)</label>
+                    <select
+                      value={adjustSupplierId}
+                      onChange={e => setAdjustSupplierId(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
+                    >
+                      <option value="">-- Select Supplier --</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {adjustSupplierId && (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-gray-700">Payment Status</label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setAdjustIsPaidInFull(true)}
+                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${adjustIsPaidInFull ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'}`}
+                        >
+                          Paid in Full
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAdjustIsPaidInFull(false)}
+                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${!adjustIsPaidInFull ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}
+                        >
+                          Partial Payment
+                        </button>
+                      </div>
+                      {!adjustIsPaidInFull && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (Rs.)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={adjustAmountPaid}
+                            onChange={e => setAdjustAmountPaid(Number(e.target.value))}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                            placeholder="0"
+                          />
+                          <p className="text-xs text-amber-600 mt-1">Remaining unpaid balance (Cost Price: Rs. {(showStockModal.costPrice * stockAdjust).toLocaleString()}) will be added to the supplier\'s outstanding amount.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setShowStockModal(null)}
                   className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleStockAdjust}
                   disabled={stockAdjust === 0}
                   className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-40 shadow-lg shadow-emerald-200"

@@ -84,6 +84,18 @@ export interface WarrantyClaim {
   createdAt: string;
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  company?: string;
+  balance: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 interface CartState {
   cart: CartItem[];
   selectedCustomer: Customer | null;

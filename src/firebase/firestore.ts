@@ -4,7 +4,7 @@ import {
   setDoc, increment
 } from 'firebase/firestore';
 import { db } from './config';
-import { Product, Customer, Invoice, Voucher, WarrantyClaim } from '../store/posStore';
+import { Product, Customer, Invoice, Voucher, WarrantyClaim, Supplier } from '../store/posStore';
 
 // Collections
 export const COLLECTIONS = {
@@ -14,6 +14,7 @@ export const COLLECTIONS = {
   INVOICES: 'invoices',
   VOUCHERS: 'vouchers',
   WARRANTY_CLAIMS: 'warrantyClaims',
+  SUPPLIERS: 'suppliers',
 };
 
 // Generate invoice number
@@ -385,4 +386,43 @@ export const getInvoiceSettings = async () => {
 
 export const saveInvoiceSettings = async (settings: typeof DEFAULT_INVOICE_SETTINGS) => {
   await setDoc(doc(db, 'settings', 'invoice'), settings);
+};
+
+// Suppliers CRUD
+export const getSuppliers = async () => {
+  const q = query(collection(db, COLLECTIONS.SUPPLIERS), orderBy('name'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+};
+
+export const addSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt'>) => {
+  const docRef = await addDoc(collection(db, COLLECTIONS.SUPPLIERS), {
+    ...supplier,
+    balance: Number(supplier.balance || 0),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return docRef.id;
+};
+
+export const updateSupplier = async (id: string, data: Partial<Supplier>) => {
+  const updateData = { ...data };
+  if (data.balance !== undefined) {
+    updateData.balance = Number(data.balance);
+  }
+  await updateDoc(doc(db, COLLECTIONS.SUPPLIERS, id), {
+    ...updateData,
+    updatedAt: new Date().toISOString(),
+  });
+};
+
+export const deleteSupplier = async (id: string) => {
+  await deleteDoc(doc(db, COLLECTIONS.SUPPLIERS, id));
+};
+
+export const adjustSupplierBalance = async (id: string, amount: number) => {
+  await updateDoc(doc(db, COLLECTIONS.SUPPLIERS, id), {
+    balance: increment(amount),
+    updatedAt: new Date().toISOString(),
+  });
 };
