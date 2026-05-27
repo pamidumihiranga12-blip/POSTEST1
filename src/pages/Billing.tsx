@@ -43,12 +43,14 @@ const Billing: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (userProfile?.displayName) {
+    if (invoiceSettings?.businessName) {
+      setCashierName(invoiceSettings.businessName);
+    } else if (userProfile?.displayName) {
       setCashierName(userProfile.displayName);
     } else {
       setCashierName('Staff');
     }
-  }, [userProfile]);
+  }, [userProfile, invoiceSettings]);
 
   const loadData = async () => {
     try {

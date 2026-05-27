@@ -4,7 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { useAuthStore } from '../store/authStore';
 import {
-  LayoutDashboard, ShoppingCart, Package, Shield, Ticket, Truck,
+  LayoutDashboard, ShoppingCart, Package, Shield, Ticket, Truck, Barcode,
   Users, FileText, BarChart3, LogOut, Menu,
   Zap, ChevronDown, Bell, Wifi, WifiOff, ShieldCheck, Settings
 } from 'lucide-react';
@@ -18,6 +18,7 @@ const navItems = [
   { path: '/vouchers', label: 'Vouchers', icon: Ticket },
   { path: '/customers', label: 'Customers', icon: Users },
   { path: '/suppliers', label: 'Suppliers', icon: Truck },
+  { path: '/barcode-print', label: 'Print Barcodes', icon: Barcode },
   { path: '/invoices', label: 'Invoices', icon: FileText },
   { path: '/reports', label: 'Reports', icon: BarChart3 },
 ];

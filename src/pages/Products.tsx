@@ -536,6 +536,7 @@ const Products: React.FC = () => {
                           )}
                           <div>
                             <p className="font-semibold text-gray-800 text-sm">{product.name}</p>
+                            {product.supplierName && <p className="text-[10px] text-violet-600 font-semibold">Supplier: {product.supplierName}</p>}
                             {product.description && <p className="text-xs text-gray-400 truncate max-w-40">{product.description}</p>}
                           </div>
                         </div>
@@ -649,6 +650,7 @@ const Products: React.FC = () => {
                 {/* Card Body */}
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-800 text-sm mb-1 truncate">{product.name}</h3>
+                  {product.supplierName && <p className="text-[10px] text-violet-600 font-semibold mb-1">Supplier: {product.supplierName}</p>}
                   <p className="text-xs text-gray-400 font-mono mb-3">{product.barcode}</p>
 
                   <div className="flex items-center justify-between mb-3">
@@ -897,6 +899,11 @@ const Products: React.FC = () => {
                           <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
                         ))}
                       </select>
+                      {selectedSupplierId && (
+                        <p className="text-[11px] text-violet-600 font-semibold mt-1">
+                          Current Outstanding Balance: Rs. {suppliers.find(s => s.id === selectedSupplierId)?.balance.toLocaleString() || 0}
+                        </p>
+                      )}
                     </div>
                     {selectedSupplierId && (
                       <div className="space-y-3">
@@ -1019,6 +1026,11 @@ const Products: React.FC = () => {
                         <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
                       ))}
                     </select>
+                    {adjustSupplierId && (
+                      <p className="text-[11px] text-violet-600 font-semibold mt-1">
+                        Current Outstanding Balance: Rs. {suppliers.find(s => s.id === adjustSupplierId)?.balance.toLocaleString() || 0}
+                      </p>
+                    )}
                   </div>
                   {adjustSupplierId && (
                     <div className="space-y-3">

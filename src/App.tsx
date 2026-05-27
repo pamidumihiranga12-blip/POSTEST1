@@ -24,6 +24,7 @@ import Reports from './pages/Reports';
 import AdminPanel from './pages/AdminPanel';
 import Profile from './pages/Profile';
 import Suppliers from './pages/Suppliers';
+import BarcodePrint from './pages/BarcodePrint';
 import InvoiceSettings from './pages/InvoiceSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -133,6 +134,7 @@ function App() {
         <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/suppliers" element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
+        <Route path="/barcode-print" element={<ProtectedRoute><BarcodePrint /></ProtectedRoute>} />
         <Route path="/warranty" element={<ProtectedRoute><Warranty /></ProtectedRoute>} />
         <Route path="/vouchers" element={<ProtectedRoute><Vouchers /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
