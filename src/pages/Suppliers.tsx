@@ -316,6 +316,11 @@ const Suppliers: React.FC = () => {
   const totalOutstanding = suppliers.reduce((sum, s) => sum + (s.balance || 0), 0);
   const activeCompanies = new Set(suppliers.map(s => s.company).filter(Boolean)).size;
 
+  // Precompute products for the settle modal (avoids IIFE in JSX)
+  const settleModalProducts = showSettleModal
+    ? products.filter(p => p.supplierId === showSettleModal.id)
+    : [];
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -453,6 +458,8 @@ const Suppliers: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
       {/* ═══ SUPPLIER PAYMENT HISTORY ═══ */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-8">
         <div className="flex items-center justify-between mb-4">
@@ -604,11 +611,9 @@ const Suppliers: React.FC = () => {
       )}
 
       {/* Settle Payment Modal - Enhanced with unit-based calc + invoice */}
-      {showSettleModal && (() => {
-        const supplierProducts = products.filter(p => p.supplierId === showSettleModal.id);
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowSettleModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      {showSettleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowSettleModal(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white z-10 p-5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl">
@@ -644,7 +649,7 @@ const Suppliers: React.FC = () => {
               {/* Product Selector */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Product Purchased</label>
-                {supplierProducts.length > 0 ? (
+                {settleModalProducts.length > 0 ? (
                   <select
                     value={settleSelectedProductId}
                     onChange={e => {
@@ -664,7 +669,7 @@ const Suppliers: React.FC = () => {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-medium text-gray-700 shadow-sm"
                   >
                     <option value="">-- Custom / Other Payment --</option>
-                    {supplierProducts.map(p => (
+                    {settleModalProducts.map(p => (
                       <option key={p.id} value={p.id}>
                         {p.name} (Cost: Rs. {p.costPrice.toLocaleString()})
                       </option>
@@ -855,8 +860,7 @@ const Suppliers: React.FC = () => {
             </div>
           </div>
         </div>
-        );
-      })()}
+      )}
     </div>
   );
 };
