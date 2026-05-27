@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings } from '../firebase/firestore';
-import { Supplier } from '../store/posStore';
+import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings, getProducts } from '../firebase/firestore';
+import { Supplier, Product } from '../store/posStore';
 import { useForm } from 'react-hook-form';
 import { Truck, Plus, Search, Edit2, Trash2, X, Save, Mail, Phone, MapPin, DollarSign, Building, Wallet, Banknote, CreditCard, Smartphone, Printer, ToggleLeft, ToggleRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -24,6 +24,8 @@ const Suppliers: React.FC = () => {
   const [settleUnits, setSettleUnits] = useState<number>(1);
   const [settlePaymentMethod, setSettlePaymentMethod] = useState<string>('cash');
   const [settleNote, setSettleNote] = useState<string>('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [settleSelectedProductId, setSettleSelectedProductId] = useState<string>('');
 
   const { register, handleSubmit, reset } = useForm<Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>>();
 
@@ -32,10 +34,11 @@ const Suppliers: React.FC = () => {
   const loadSuppliers = async () => {
     setLoading(true);
     try {
-      const data = await getSuppliers();
-      setSuppliers(data);
+      const [suppliersData, productsData] = await Promise.all([getSuppliers(), getProducts()]);
+      setSuppliers(suppliersData);
+      setProducts(productsData);
     } catch (error) {
-      toast.error('Failed to load suppliers');
+      toast.error('Failed to load supplier details');
     } finally {
       setLoading(false);
     }
@@ -106,6 +109,7 @@ const Suppliers: React.FC = () => {
     setSettling(true);
     try {
       const invoiceNumber = generateSupplierInvoiceNumber();
+      const selectedProduct = products.find(p => p.id === settleSelectedProductId);
 
       // 1. Reduce the outstanding balance
       await adjustSupplierBalance(showSettleModal.id, -settleAmount);
@@ -115,6 +119,8 @@ const Suppliers: React.FC = () => {
         supplierId: showSettleModal.id,
         supplierName: showSettleModal.name,
         supplierCompany: showSettleModal.company || undefined,
+        productId: selectedProduct?.id || undefined,
+        productName: selectedProduct?.name || undefined,
         unitsPaid: !settleManualMode && settleCostPerUnit > 0 ? settleUnits : 0,
         costPerUnit: settleCostPerUnit,
         totalAmount: settleAmount,
@@ -128,6 +134,7 @@ const Suppliers: React.FC = () => {
       await generateSettleInvoice({
         invoiceNumber,
         supplier: showSettleModal,
+        productName: selectedProduct?.name || undefined,
         unitsPaid: !settleManualMode && settleCostPerUnit > 0 ? settleUnits : 0,
         costPerUnit: settleCostPerUnit,
         totalAmount: settleAmount,
@@ -152,6 +159,7 @@ const Suppliers: React.FC = () => {
   const generateSettleInvoice = async (data: {
     invoiceNumber: string;
     supplier: Supplier;
+    productName?: string;
     unitsPaid: number;
     costPerUnit: number;
     totalAmount: number;
@@ -224,10 +232,11 @@ const Suppliers: React.FC = () => {
   ${data.supplier.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${data.supplier.phone}</span></div>` : ''}
   <hr>
 
-  ${data.unitsPaid > 0 ? `
-  <div class="section-title">Unit Details</div>
-  <div class="row"><span class="lbl">Units Paid:</span><span>${data.unitsPaid}</span></div>
-  <div class="row"><span class="lbl">Cost/Unit:</span><span>Rs. ${data.costPerUnit.toLocaleString()}</span></div>
+  ${data.productName || data.unitsPaid > 0 ? `
+  <div class="section-title">Purchase Details</div>
+  ${data.productName ? `<div class="row" style="margin-bottom:1px;"><span class="lbl">Product:</span><span class="val" style="text-align:right;max-width:45mm;word-break:break-word;">${data.productName}</span></div>` : ''}
+  ${data.unitsPaid > 0 ? `<div class="row"><span class="lbl">Units Paid:</span><span>${data.unitsPaid}</span></div>` : ''}
+  ${data.costPerUnit > 0 ? `<div class="row"><span class="lbl">Cost/Unit:</span><span>Rs. ${data.costPerUnit.toLocaleString()}</span></div>` : ''}
   <hr>
   ` : ''}
 
@@ -406,6 +415,7 @@ const Suppliers: React.FC = () => {
                       setSettleUnits(1);
                       setSettlePaymentMethod('cash');
                       setSettleNote('');
+                      setSettleSelectedProductId('');
                     }}
                     className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-xs font-semibold hover:from-emerald-600 hover:to-teal-600 shadow-sm transition-all hover:scale-[1.03] active:scale-[0.97]"
                   >
@@ -471,8 +481,10 @@ const Suppliers: React.FC = () => {
       )}
 
       {/* Settle Payment Modal - Enhanced with unit-based calc + invoice */}
-      {showSettleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowSettleModal(null)}>
+      {showSettleModal && (() => {
+        const supplierProducts = products.filter(p => p.supplierId === showSettleModal.id);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowSettleModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white z-10 p-5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -504,6 +516,42 @@ const Suppliers: React.FC = () => {
                   <p className="text-xs text-gray-400 mb-0.5">Total Outstanding Balance</p>
                   <p className="text-2xl font-black text-gray-800">Rs. {(showSettleModal.balance || 0).toLocaleString()}</p>
                 </div>
+              </div>
+
+              {/* Product Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Product Purchased</label>
+                {supplierProducts.length > 0 ? (
+                  <select
+                    value={settleSelectedProductId}
+                    onChange={e => {
+                      const prodId = e.target.value;
+                      setSettleSelectedProductId(prodId);
+                      const prod = products.find(p => p.id === prodId);
+                      if (prod) {
+                        setSettleCostPerUnit(prod.costPrice);
+                        setSettleAmount(prod.costPrice * settleUnits);
+                        setSettleManualMode(false); // Switch to unit-based auto-calculation
+                      } else {
+                        setSettleCostPerUnit(0);
+                        setSettleAmount(showSettleModal.balance);
+                        setSettleManualMode(true);
+                      }
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white font-medium text-gray-700 shadow-sm"
+                  >
+                    <option value="">-- Custom / Other Payment --</option>
+                    {supplierProducts.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} (Cost: Rs. {p.costPrice.toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="px-4 py-2.5 border border-dashed border-gray-200 rounded-xl bg-gray-50 text-xs text-gray-400 font-medium">
+                    No products registered under this supplier
+                  </div>
+                )}
               </div>
 
               {/* Mode Toggle */}
@@ -684,7 +732,8 @@ const Suppliers: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
