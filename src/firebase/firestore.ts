@@ -374,8 +374,10 @@ export const DEFAULT_INVOICE_SETTINGS = {
   footerNote: 'Powered by SmartZone POS',
   showLogo: true,
   showBarcode: false,
-  primaryColor: '#4f46e5',
+  primaryColor: '#111111',
   logoUrl: '',
+  fontFamilySelection: 'English (Courier)',
+  fontSizeSelection: 'medium',
 };
 
 export const getInvoiceSettings = async () => {

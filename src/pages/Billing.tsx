@@ -228,8 +228,29 @@ const Billing: React.FC = () => {
     const thankYou = s.thankYouMessage || 'Thank you for shopping with us!';
     const returnPolicy = s.returnPolicy || '';
     const footerNote = s.footerNote || 'Powered by SmartZone POS';
-    const primaryColor = s.primaryColor || '#4f46e5';
     const logoUrl = s.logoUrl || '';
+
+    const fontMapping: Record<string, string> = {
+      'English (Courier)': "'Courier New', Courier, monospace",
+      'Sinhala (Iskoola Pota)': "'Iskoola Pota', 'FMAbhaya', 'Sinhala', sans-serif",
+      'Tamil (Latha)': "'Latha', 'Tamil', 'Bamini', sans-serif",
+      'System Sans-Serif': "system-ui, -apple-system, sans-serif",
+    };
+
+    const getFontSizeStyles = (size?: string) => {
+      switch (size) {
+        case 'small':
+          return { body: '9px', title: '13px', caption: '8px' };
+        case 'large':
+          return { body: '14px', title: '20px', caption: '11px' };
+        case 'medium':
+        default:
+          return { body: '11px', title: '16px', caption: '9px' };
+      }
+    };
+
+    const fontFamily = fontMapping[s.fontFamilySelection || 'English (Courier)'] || "'Courier New', Courier, monospace";
+    const fontSizeStyle = getFontSizeStyles(s.fontSizeSelection);
 
     const itemsHtml = invoice.items.map((item: any) => `
       <tr>
@@ -254,8 +275,8 @@ const Billing: React.FC = () => {
       width: 72mm;
       margin: 0 auto;
       padding: 4mm 2mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
+      font-family: ${fontFamily};
+      font-size: ${fontSizeStyle.body};
       color: #111;
       background: #fff;
     }
@@ -263,14 +284,14 @@ const Billing: React.FC = () => {
     .logo-area { text-align: center; padding: 4mm 0 2mm; }
     .logo-img { width: 30mm; height: auto; margin-bottom: 2mm; }
     .business-name {
-      font-size: 16px;
+      font-size: ${fontSizeStyle.title};
       font-weight: 900;
       letter-spacing: 1px;
-      color: ${primaryColor};
+      color: #111;
       text-transform: uppercase;
     }
     .tagline { font-size: 9px; color: #555; margin-top: 1mm; }
-    .contact { font-size: 9px; color: #444; margin-top: 1mm; line-height: 1.5; }
+    .contact { font-size: ${fontSizeStyle.caption}; color: #444; margin-top: 1mm; line-height: 1.5; }
     .divider { border: none; border-top: 1px dashed #999; margin: 2mm 0; }
     .divider-solid { border: none; border-top: 1px solid #333; margin: 2mm 0; }
     .section { margin: 1mm 0; }
@@ -282,15 +303,15 @@ const Billing: React.FC = () => {
     thead th { font-size: 9px; padding: 2px 0; text-align: left; text-transform: uppercase; color: #444; }
     thead th:nth-child(2) { text-align: center; }
     thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
-    tbody td { font-size: 10px; color: #222; }
+    tbody td { font-size: ${fontSizeStyle.body}; color: #222; }
     tfoot tr { border-top: 1px dashed #999; }
     tfoot td { padding: 2px 0; }
     .total-row { font-size: 13px; font-weight: 900; border-top: 1px solid #333; border-bottom: 1px solid #333; }
     .total-row td { padding: 3px 0; }
     .badge {
       display: inline-block;
-      background: ${primaryColor};
-      color: #fff;
+      border: 1px solid #111;
+      color: #111;
       font-size: 9px;
       padding: 1px 5px;
       border-radius: 10px;
@@ -298,10 +319,10 @@ const Billing: React.FC = () => {
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .thank-you { text-align: center; margin: 4mm 0 2mm; font-size: 12px; font-weight: 700; color: ${primaryColor}; }
+    .thank-you { text-align: center; margin: 4mm 0 2mm; font-size: 12px; font-weight: 700; color: #111; }
     .return-policy { text-align: center; font-size: 8px; color: #666; line-height: 1.4; }
     .footer { text-align: center; font-size: 8px; color: #999; margin-top: 3mm; padding-bottom: 4mm; }
-    .inv-number { font-size: 10px; font-weight: 700; color: ${primaryColor}; }
+    .inv-number { font-size: 10px; font-weight: 700; color: #111; }
     .cashier-badge { background: #f0f0f0; border-radius: 4px; padding: 1px 4px; font-size: 9px; }
     @media print {
       body { width: 72mm; margin: 0 auto; padding: 2mm 1mm; }
@@ -361,7 +382,7 @@ const Billing: React.FC = () => {
       </tr>` : ''}
       <tr class="total-row">
         <td colspan="3" style="text-align:right;">TOTAL:</td>
-        <td style="text-align:right;color:${primaryColor};">Rs.${invoice.total.toLocaleString()}</td>
+        <td style="text-align:right;color:#111;">Rs.${invoice.total.toLocaleString()}</td>
       </tr>
       ${invoice.cashReceived ? `
       <tr>

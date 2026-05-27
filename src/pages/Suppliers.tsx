@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings, getProducts } from '../firebase/firestore';
-import { Supplier, Product } from '../store/posStore';
+import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, adjustSupplierBalance, addSupplierPayment, generateSupplierInvoiceNumber, getInvoiceSettings, getProducts, getSupplierPayments } from '../firebase/firestore';
+import { Supplier, Product, SupplierPayment } from '../store/posStore';
 import { useForm } from 'react-hook-form';
 import { Truck, Plus, Search, Edit2, Trash2, X, Save, Mail, Phone, MapPin, DollarSign, Building, Wallet, Banknote, CreditCard, Smartphone, Printer, ToggleLeft, ToggleRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -26,6 +26,7 @@ const Suppliers: React.FC = () => {
   const [settleNote, setSettleNote] = useState<string>('');
   const [products, setProducts] = useState<Product[]>([]);
   const [settleSelectedProductId, setSettleSelectedProductId] = useState<string>('');
+  const [payments, setPayments] = useState<SupplierPayment[]>([]);
 
   const { register, handleSubmit, reset } = useForm<Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>>();
 
@@ -34,9 +35,14 @@ const Suppliers: React.FC = () => {
   const loadSuppliers = async () => {
     setLoading(true);
     try {
-      const [suppliersData, productsData] = await Promise.all([getSuppliers(), getProducts()]);
+      const [suppliersData, productsData, paymentsData] = await Promise.all([
+        getSuppliers(),
+        getProducts(),
+        getSupplierPayments()
+      ]);
       setSuppliers(suppliersData);
       setProducts(productsData);
+      setPayments(paymentsData);
     } catch (error) {
       toast.error('Failed to load supplier details');
     } finally {
@@ -172,8 +178,30 @@ const Suppliers: React.FC = () => {
     try {
       settings = await getInvoiceSettings();
     } catch {
-      settings = { businessName: 'SmartZone POS', address: '', phone: '', email: '', primaryColor: '#4f46e5', logoUrl: '', footerNote: 'Powered by SmartZone POS' };
+      settings = { businessName: 'SmartZone POS', address: '', phone: '', email: '', primaryColor: '#111111', logoUrl: '', footerNote: 'Powered by SmartZone POS' };
     }
+
+    const fontMapping: Record<string, string> = {
+      'English (Courier)': "'Courier New', Courier, monospace",
+      'Sinhala (Iskoola Pota)': "'Iskoola Pota', 'FMAbhaya', 'Sinhala', sans-serif",
+      'Tamil (Latha)': "'Latha', 'Tamil', 'Bamini', sans-serif",
+      'System Sans-Serif': "system-ui, -apple-system, sans-serif",
+    };
+
+    const getFontSizeStyles = (size?: string) => {
+      switch (size) {
+        case 'small':
+          return { body: '9px', title: '13px', caption: '8px' };
+        case 'large':
+          return { body: '14px', title: '20px', caption: '11px' };
+        case 'medium':
+        default:
+          return { body: '11px', title: '16px', caption: '9px' };
+      }
+    };
+
+    const fontFamily = fontMapping[settings.fontFamilySelection || 'English (Courier)'] || "'Courier New', Courier, monospace";
+    const fontSizeStyle = getFontSizeStyles(settings.fontSizeSelection);
 
     const now = new Date();
     const dateStr = format(now, 'dd/MM/yyyy hh:mm a');
@@ -186,24 +214,24 @@ const Suppliers: React.FC = () => {
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:'Courier New',monospace; font-size:11px; color:#111; }
+  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:${fontFamily}; font-size:${fontSizeStyle.body}; color:#111; }
   .center { text-align:center; }
-  .name { font-size:16px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:1px; }
-  .tagline { font-size:10px; color:${settings.primaryColor}; margin-top:2mm; font-weight:700; letter-spacing:0.5px; }
-  .contact { font-size:9px; color:#444; margin-top:1mm; line-height:1.5; }
+  .name { font-size:${fontSizeStyle.title}; font-weight:900; color:#111; text-transform:uppercase; letter-spacing:1px; }
+  .tagline { font-size:10px; color:#111; margin-top:2mm; font-weight:700; letter-spacing:0.5px; }
+  .contact { font-size:${fontSizeStyle.caption}; color:#444; margin-top:1mm; line-height:1.5; }
   hr { border:none; border-top:1px dashed #999; margin:2mm 0; }
   .solid { border-top:1px solid #333; }
-  .row { display:flex; justify-content:space-between; margin:1px 0; font-size:10px; }
+  .row { display:flex; justify-content:space-between; margin:1px 0; font-size:${fontSizeStyle.body}; }
   .lbl { color:#555; }
   .val { font-weight:700; }
-  .section-title { font-size:10px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:0.5px; margin:2mm 0 1mm; }
+  .section-title { font-size:10px; font-weight:900; color:#111; text-transform:uppercase; letter-spacing:0.5px; margin:2mm 0 1mm; }
   .amount-box { background:#f5f5f5; border:1px solid #ddd; border-radius:4px; padding:3mm 2mm; text-align:center; margin:2mm 0; }
   .amount-label { font-size:9px; color:#666; }
-  .amount-value { font-size:18px; font-weight:900; color:${settings.primaryColor}; }
-  .balance-row { display:flex; justify-content:space-between; padding:1.5mm 0; font-size:10px; }
-  .badge { display:inline-block; background:${settings.primaryColor}; color:#fff; font-size:9px; padding:1px 5px; border-radius:10px; font-weight:700; }
+  .amount-value { font-size:18px; font-weight:900; color:#111; }
+  .balance-row { display:flex; justify-content:space-between; padding:1.5mm 0; font-size:${fontSizeStyle.body}; }
+  .badge { display:inline-block; border: 1px solid #111; color:#111; font-size:9px; padding:1px 5px; border-radius:10px; font-weight:700; }
   .footer { text-align:center; font-size:8px; color:#999; margin-top:3mm; }
-  .paid-stamp { text-align:center; font-size:14px; font-weight:900; color:#059669; border:2px solid #059669; border-radius:6px; padding:2mm 4mm; margin:3mm auto; display:inline-block; text-transform:uppercase; letter-spacing:1px; }
+  .paid-stamp { text-align:center; font-size:14px; font-weight:900; color:#111; border:2px solid #111; border-radius:6px; padding:2mm 4mm; margin:3mm auto; display:inline-block; text-transform:uppercase; letter-spacing:1px; }
 </style>
 </head>
 <body>
@@ -218,20 +246,20 @@ const Suppliers: React.FC = () => {
     </div>
   </div>
   <hr class="solid">
-
+ 
   <div style="margin:1mm 0;">
-    <div class="row"><span class="lbl">Invoice #</span><span style="font-weight:700;color:${settings.primaryColor};">${data.invoiceNumber}</span></div>
+    <div class="row"><span class="lbl">Invoice #</span><span style="font-weight:700;color:#111;">${data.invoiceNumber}</span></div>
     <div class="row"><span class="lbl">Date:</span><span>${dateStr}</span></div>
     <div class="row"><span class="lbl">Payment:</span><span class="badge">${payMethodLabel}</span></div>
   </div>
   <hr>
-
+ 
   <div class="section-title">Supplier Details</div>
   <div class="row"><span class="lbl">Name:</span><span class="val">${data.supplier.name}</span></div>
   ${data.supplier.company ? `<div class="row"><span class="lbl">Company:</span><span>${data.supplier.company}</span></div>` : ''}
   ${data.supplier.phone ? `<div class="row"><span class="lbl">Phone:</span><span>${data.supplier.phone}</span></div>` : ''}
   <hr>
-
+ 
   ${data.productName || data.unitsPaid > 0 ? `
   <div class="section-title">Purchase Details</div>
   ${data.productName ? `<div class="row" style="margin-bottom:1px;"><span class="lbl">Product:</span><span class="val" style="text-align:right;max-width:45mm;word-break:break-word;">${data.productName}</span></div>` : ''}
@@ -239,27 +267,27 @@ const Suppliers: React.FC = () => {
   ${data.costPerUnit > 0 ? `<div class="row"><span class="lbl">Cost/Unit:</span><span>Rs. ${data.costPerUnit.toLocaleString()}</span></div>` : ''}
   <hr>
   ` : ''}
-
+ 
   <div class="amount-box">
     <div class="amount-label">AMOUNT PAID</div>
     <div class="amount-value">Rs. ${data.totalAmount.toLocaleString()}</div>
   </div>
-
+ 
   <div class="section-title">Balance Summary</div>
   <div class="balance-row" style="color:#666;"><span>Previous Balance:</span><span>Rs. ${data.previousBalance.toLocaleString()}</span></div>
-  <div class="balance-row" style="color:#059669;font-weight:700;"><span>Amount Paid:</span><span>- Rs. ${data.totalAmount.toLocaleString()}</span></div>
+  <div class="balance-row" style="color:#111;font-weight:700;"><span>Amount Paid:</span><span>- Rs. ${data.totalAmount.toLocaleString()}</span></div>
   <hr class="solid">
-  <div class="balance-row" style="font-weight:900;font-size:12px;"><span>New Balance:</span><span style="color:${data.newBalance > 0 ? '#ef4444' : '#059669'};">Rs. ${Math.max(0, data.newBalance).toLocaleString()}</span></div>
-
+  <div class="balance-row" style="font-weight:900;font-size:12px;"><span>New Balance:</span><span style="color:#111;">Rs. ${Math.max(0, data.newBalance).toLocaleString()}</span></div>
+ 
   ${data.note ? `
   <hr>
   <div style="font-size:9px;color:#555;text-align:center;margin:1mm 0;">Note: ${data.note}</div>
   ` : ''}
-
+ 
   <div class="center" style="margin:3mm 0;">
     <div class="paid-stamp">\u2713 PAID</div>
   </div>
-
+ 
   <hr>
   <div class="footer">${settings.footerNote || 'Powered by SmartZone POS'}</div>
   <div class="footer" style="margin-top:1mm;">Generated: ${dateStr}</div>
@@ -425,8 +453,103 @@ const Suppliers: React.FC = () => {
               </div>
             </div>
           ))}
+      {/* ═══ SUPPLIER PAYMENT HISTORY ═══ */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-800">Supplier Payment History</h2>
+              <p className="text-xs text-gray-400">View and print invoices for past payments</p>
+            </div>
+          </div>
         </div>
-      )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-gray-400 font-medium text-xs uppercase">
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Invoice #</th>
+                <th className="py-3 px-4">Supplier</th>
+                <th className="py-3 px-4">Product / Item</th>
+                <th className="py-3 px-4 text-center">Units Paid</th>
+                <th className="py-3 px-4 text-right">Amount Paid</th>
+                <th className="py-3 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 text-gray-700">
+              {payments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-400">
+                    No supplier payments recorded yet.
+                  </td>
+                </tr>
+              ) : (
+                [...payments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10).map(payment => (
+                  <tr key={payment.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-3 px-4 text-xs whitespace-nowrap">
+                      {format(new Date(payment.createdAt), 'dd MMM yyyy, hh:mm a')}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs font-semibold text-emerald-600">
+                      {payment.invoiceNumber}
+                    </td>
+                    <td className="py-3 px-4 font-medium text-gray-800">
+                      <div>
+                        <p>{payment.supplierName}</p>
+                        {payment.supplierCompany && <p className="text-[10px] text-gray-400 font-normal">{payment.supplierCompany}</p>}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 max-w-[200px] truncate">
+                      {payment.productName || <span className="text-gray-400 text-xs italic">General Settle</span>}
+                    </td>
+                    <td className="py-3 px-4 text-center font-semibold text-gray-600">
+                      {payment.unitsPaid > 0 ? payment.unitsPaid : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold text-gray-800 whitespace-nowrap">
+                      Rs. {payment.totalAmount.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => {
+                          const supp = suppliers.find(s => s.id === payment.supplierId) || {
+                            id: payment.supplierId,
+                            name: payment.supplierName,
+                            company: payment.supplierCompany || '',
+                            balance: 0,
+                            phone: '',
+                            email: '',
+                            address: '',
+                            createdAt: ''
+                          };
+                          generateSettleInvoice({
+                            invoiceNumber: payment.invoiceNumber,
+                            supplier: supp as any,
+                            productName: payment.productName || undefined,
+                            unitsPaid: payment.unitsPaid,
+                            costPerUnit: payment.costPerUnit,
+                            totalAmount: payment.totalAmount,
+                            paymentMethod: payment.paymentMethod,
+                            previousBalance: payment.totalAmount, // Mock previous balance since it's already settled
+                            newBalance: 0,
+                            note: payment.note || '',
+                          });
+                        }}
+                        className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-semibold"
+                        title="Print Invoice"
+                      >
+                        <Printer className="w-3.5 h-3.5" /> Print
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Supplier Create/Edit Form Modal */}
       {showForm && (

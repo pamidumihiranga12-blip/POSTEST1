@@ -37,20 +37,20 @@ const BarcodeItem: React.FC<{
     }
   }, [value, width, height, showText, sizeLabel]);
 
-  const containerPadding = sizeLabel === 'small' ? 'p-1.5' : sizeLabel === 'medium' ? 'p-3' : 'p-4';
+  const containerPadding = sizeLabel === 'small' ? 'p-1' : sizeLabel === 'medium' ? 'p-1.5' : 'p-2';
 
   return (
-    <div className={`barcode-label-box bg-white border border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-center ${containerPadding} shadow-sm page-break-inside-avoid`}>
+    <div className={`barcode-label-box bg-white border border-gray-300 flex flex-col items-center justify-center text-center ${containerPadding} page-break-inside-avoid`}>
       {showName && name && (
-        <p className={`font-bold text-gray-800 truncate w-full mb-0.5 leading-tight ${sizeLabel === 'small' ? 'text-[9px]' : sizeLabel === 'medium' ? 'text-xs' : 'text-sm'}`}>
+        <p className={`font-bold text-gray-800 truncate w-full mb-0 leading-tight ${sizeLabel === 'small' ? 'text-[7px]' : sizeLabel === 'medium' ? 'text-[9px]' : 'text-[11px]'}`}>
           {name}
         </p>
       )}
-      <div className="flex justify-center items-center py-1">
+      <div className="flex justify-center items-center">
         <svg ref={svgRef} className="max-w-full" />
       </div>
       {showPrice && price !== undefined && (
-        <p className={`font-black text-indigo-600 mt-0.5 ${sizeLabel === 'small' ? 'text-[10px]' : sizeLabel === 'medium' ? 'text-xs' : 'text-base'}`}>
+        <p className={`font-black text-gray-800 mt-0 leading-tight ${sizeLabel === 'small' ? 'text-[8px]' : sizeLabel === 'medium' ? 'text-[10px]' : 'text-[13px]'}`}>
           Rs. {price.toLocaleString()}
         </p>
       )}
@@ -135,12 +135,12 @@ const BarcodePrint: React.FC = () => {
   const getBarcodeConfig = () => {
     switch (size) {
       case 'small':
-        return { width: 1.0, height: 25, cols: 5, colClass: 'grid-cols-5' };
+        return { width: 0.9, height: 22, cols: 6, colClass: 'grid-cols-6' };
       case 'large':
-        return { width: 2.2, height: 65, cols: 2, colClass: 'grid-cols-2' };
+        return { width: 1.8, height: 55, cols: 3, colClass: 'grid-cols-3' };
       case 'medium':
       default:
-        return { width: 1.6, height: 45, cols: 3, colClass: 'grid-cols-3' };
+        return { width: 1.2, height: 35, cols: 4, colClass: 'grid-cols-4' };
     }
   };
 
@@ -158,12 +158,10 @@ const BarcodePrint: React.FC = () => {
     }
 
     const htmlLabels = flatLabels.map(p => {
-      // Calculate font size & padding for HTML template
-      const fontSize = size === 'small' ? '8px' : size === 'medium' ? '11px' : '13px';
-      const priceSize = size === 'small' ? '9px' : size === 'medium' ? '12px' : '15px';
-      const labelPadding = size === 'small' ? '2mm' : size === 'medium' ? '4mm' : '6mm';
-
-      // SVG dynamic attributes
+      // Compact font sizes for maximum density
+      const fontSize = size === 'small' ? '7px' : size === 'medium' ? '9px' : '11px';
+      const priceSize = size === 'small' ? '8px' : size === 'medium' ? '10px' : '13px';
+      const labelPadding = size === 'small' ? '1mm' : size === 'medium' ? '2mm' : '3mm';
       const svgWidth = config.width;
       const svgHeight = config.height;
 
@@ -175,8 +173,8 @@ const BarcodePrint: React.FC = () => {
                jsbarcode-width="${svgWidth}"
                jsbarcode-height="${svgHeight}"
                jsbarcode-displayValue="${showText}"
-               jsbarcode-fontSize="${size === 'small' ? 9 : size === 'medium' ? 12 : 14}"
-               jsbarcode-margin="0">
+               jsbarcode-fontSize="${size === 'small' ? 7 : size === 'medium' ? 9 : 11}"
+               jsbarcode-margin="1">
           </svg>
           ${showPrice ? `<div class="p-price" style="font-size: ${priceSize};">Rs. ${(p.price || 0).toLocaleString()}</div>` : ''}
         </div>
@@ -194,52 +192,56 @@ const BarcodePrint: React.FC = () => {
         <style>
           @page {
             size: A4;
-            margin: 10mm;
+            margin: 5mm;
           }
+          * { box-sizing: border-box; }
           body {
             margin: 0;
+            padding: 0;
             font-family: system-ui, -apple-system, sans-serif;
-            background: #white;
+            background: white;
           }
           .print-grid {
             display: grid;
             grid-template-columns: repeat(${colsCount}, 1fr);
-            gap: 5mm;
+            gap: 1.5mm;
+            width: 100%;
           }
           .barcode-label {
-            box-sizing: border-box;
-            border: 1px dashed #ddd;
-            border-radius: 4px;
+            border: 0.5pt solid #ccc;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
             background: white;
+            break-inside: avoid;
             page-break-inside: avoid;
-            margin-bottom: 2mm;
+            overflow: hidden;
           }
           .p-name {
             font-weight: 700;
-            margin-bottom: 1mm;
-            color: #111;
+            margin-bottom: 0.5mm;
+            color: #000;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             width: 100%;
+            line-height: 1.1;
           }
           .p-price {
             font-weight: 900;
-            color: #4f46e5;
-            margin-top: 1mm;
+            color: #000;
+            margin-top: 0.5mm;
+            line-height: 1.1;
           }
           .barcode-svg {
             max-width: 100%;
+            display: block;
           }
           @media print {
-            .barcode-label {
-              border: 1px dashed #bbb; /* Print guidelines */
-            }
+            body { margin: 0; padding: 0; }
+            .barcode-label { border: 0.5pt solid #999; }
           }
         </style>
       </head>
@@ -253,7 +255,7 @@ const BarcodePrint: React.FC = () => {
             setTimeout(() => {
               window.print();
               window.onafterprint = () => window.close();
-            }, 300);
+            }, 400);
           };
         </script>
       </body>

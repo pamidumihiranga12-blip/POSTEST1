@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import {
   Settings, Save, RefreshCw, Eye, Building2, Phone, Mail,
-  Globe, MessageSquare, Palette, Image, Printer
+  Globe, MessageSquare, Palette, Image, Printer, AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 type Settings = typeof DEFAULT_INVOICE_SETTINGS;
 
 const COLORS = [
+  { label: 'Black (Thermal Recommended)', value: '#111111' },
   { label: 'Indigo', value: '#4f46e5' },
   { label: 'Violet', value: '#7c3aed' },
   { label: 'Blue', value: '#2563eb' },
@@ -21,8 +22,40 @@ const COLORS = [
   { label: 'Rose', value: '#e11d48' },
   { label: 'Amber', value: '#d97706' },
   { label: 'Slate', value: '#334155' },
-  { label: 'Black', value: '#111111' },
 ];
+
+const FONT_FAMILIES = [
+  'English (Courier)',
+  'Sinhala (Iskoola Pota)',
+  'Tamil (Latha)',
+  'System Sans-Serif',
+];
+
+const FONT_MAPPING: Record<string, string> = {
+  'English (Courier)': "'Courier New', Courier, monospace",
+  'Sinhala (Iskoola Pota)': "'Iskoola Pota', 'FMAbhaya', 'Sinhala', sans-serif",
+  'Tamil (Latha)': "'Latha', 'Tamil', 'Bamini', sans-serif",
+  'System Sans-Serif': "system-ui, -apple-system, sans-serif",
+};
+
+const FONT_SIZES = [
+  { label: 'Small', value: 'small' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'Large', value: 'large' },
+];
+
+const getFontSizeStyles = (size?: string) => {
+  switch (size) {
+    case 'small':
+      return { body: '9px', title: '13px', caption: '8px' };
+    case 'large':
+      return { body: '14px', title: '20px', caption: '11px' };
+    case 'medium':
+    default:
+      return { body: '11px', title: '16px', caption: '9px' };
+  }
+};
+
 
 const InvoiceSettings: React.FC = () => {
   const [settings, setSettings] = useState<Settings>({ ...DEFAULT_INVOICE_SETTINGS });
@@ -70,11 +103,11 @@ const InvoiceSettings: React.FC = () => {
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:'Courier New',monospace; font-size:11px; color:#111; }
+  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:${FONT_MAPPING[settings.fontFamilySelection || 'English (Courier)']}; font-size:${getFontSizeStyles(settings.fontSizeSelection).body}; color:#111; }
   .center { text-align:center; }
-  .name { font-size:16px; font-weight:900; color:${settings.primaryColor}; text-transform:uppercase; letter-spacing:1px; }
+  .name { font-size:${getFontSizeStyles(settings.fontSizeSelection).title}; font-weight:900; color:#111; text-transform:uppercase; letter-spacing:1px; }
   .tagline { font-size:9px; color:#555; margin-top:1mm; }
-  .contact { font-size:9px; color:#444; margin-top:1mm; line-height:1.5; }
+  .contact { font-size:${getFontSizeStyles(settings.fontSizeSelection).caption}; color:#444; margin-top:1mm; line-height:1.5; }
   hr { border:none; border-top:1px dashed #999; margin:2mm 0; }
   .solid { border-top:1px solid #333; }
   .row { display:flex; justify-content:space-between; margin:1px 0; }
@@ -84,12 +117,12 @@ const InvoiceSettings: React.FC = () => {
   thead th { font-size:9px; padding:2px 0; text-align:left; color:#444; text-transform:uppercase; border-bottom:1px solid #333; }
   thead th:nth-child(2){ text-align:center; }
   thead th:nth-child(3),thead th:nth-child(4){ text-align:right; }
-  td { font-size:10px; padding:2px 0; }
-  .total { font-size:13px; font-weight:900; color:${settings.primaryColor}; }
-  .thank { text-align:center; font-size:12px; font-weight:700; color:${settings.primaryColor}; margin:4mm 0 2mm; }
+  td { font-size:${getFontSizeStyles(settings.fontSizeSelection).body}; padding:2px 0; }
+  .total { font-size:13px; font-weight:900; color:#111; }
+  .thank { text-align:center; font-size:12px; font-weight:700; color:#111; margin:4mm 0 2mm; }
   .policy { text-align:center; font-size:8px; color:#666; }
   .footer { text-align:center; font-size:8px; color:#999; margin-top:3mm; }
-  .badge { display:inline-block; background:${settings.primaryColor}; color:#fff; font-size:9px; padding:1px 5px; border-radius:10px; font-weight:700; }
+  .badge { display:inline-block; border: 1px solid #111; color:#111; font-size:9px; padding:1px 5px; border-radius:10px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -296,6 +329,49 @@ const InvoiceSettings: React.FC = () => {
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings.showLogo ? 'translate-x-5' : ''}`} />
                 </button>
                 <label className="text-sm text-gray-700">Show logo on receipt</label>
+              </div>
+            </div>
+          </div>
+
+          {/* Receipt Typography & Font Selection */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Palette className="w-5 h-5 text-indigo-500" />
+              <h2 className="font-semibold text-gray-800">Receipt Typography & Font Selection</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-sm text-amber-800">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Thermal Printer compatibility:</span> Thermal receipt printers print in monochrome (Black & White). All standard printed invoices have been optimized to output in pure Black to prevent fading.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Font / Language Pack</label>
+                  <select
+                    value={settings.fontFamilySelection || 'English (Courier)'}
+                    onChange={e => set('fontFamilySelection', e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                  >
+                    {FONT_FAMILIES.map(font => (
+                      <option key={font} value={font}>{font}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Font Size</label>
+                  <select
+                    value={settings.fontSizeSelection || 'medium'}
+                    onChange={e => set('fontSizeSelection', e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                  >
+                    {FONT_SIZES.map(sz => (
+                      <option key={sz.value} value={sz.value}>{sz.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>
