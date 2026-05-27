@@ -192,7 +192,7 @@ const Suppliers: React.FC = () => {
     try {
       settings = await getInvoiceSettings();
     } catch {
-      settings = { businessName: 'SmartZone POS', address: '', phone: '', email: '', primaryColor: '#111111', logoUrl: '', footerNote: 'Powered by SmartZone POS' };
+      settings = { businessName: 'SMART ZONE', address: '', phone: '', email: '', primaryColor: '#111111', logoUrl: '', footerNote: 'Powered by SMART ZONE' };
     }
 
     const fontMapping: Record<string, string> = {
@@ -303,7 +303,7 @@ const Suppliers: React.FC = () => {
   </div>
  
   <hr>
-  <div class="footer">${settings.footerNote || 'Powered by SmartZone POS'}</div>
+  <div class="footer">${settings.footerNote || 'Powered by SMART ZONE'}</div>
   <div class="footer" style="margin-top:1mm;">Generated: ${dateStr}</div>
 </body>
 </html>`;

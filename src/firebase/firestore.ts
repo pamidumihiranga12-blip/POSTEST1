@@ -363,7 +363,7 @@ export const getDashboardStats = async () => {
 
 // Invoice Settings
 export const DEFAULT_INVOICE_SETTINGS = {
-  businessName: 'SmartZone POS',
+  businessName: 'SMART ZONE',
   tagline: 'Your Trusted Shopping Destination',
   address: '123 Main Street, City',
   phone: '+94 77 123 4567',
@@ -371,7 +371,7 @@ export const DEFAULT_INVOICE_SETTINGS = {
   website: 'www.smartzone.lk',
   thankYouMessage: 'Thank you for shopping with us!',
   returnPolicy: 'Returns accepted within 7 days with receipt.',
-  footerNote: 'Powered by SmartZone POS',
+  footerNote: 'Powered by SMART ZONE',
   showLogo: true,
   showBarcode: false,
   primaryColor: '#111111',

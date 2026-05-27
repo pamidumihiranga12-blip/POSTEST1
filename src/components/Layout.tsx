@@ -88,7 +88,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
         {sidebarOpen && (
           <div>
-            <p className="font-bold text-gray-800 leading-tight">SmartZone</p>
+            <p className="font-bold text-gray-800 leading-tight">SMART ZONE</p>
             <p className="text-xs text-indigo-500 font-medium">Point of Sale</p>
           </div>
         )}

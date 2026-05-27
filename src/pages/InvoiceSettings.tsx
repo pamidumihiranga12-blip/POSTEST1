@@ -408,7 +408,7 @@ const InvoiceSettings: React.FC = () => {
                   value={settings.footerNote}
                   onChange={e => set('footerNote', e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  placeholder="Powered by SmartZone POS"
+                  placeholder="Powered by SMART ZONE"
                 />
               </div>
             </div>

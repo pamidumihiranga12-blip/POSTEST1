@@ -220,14 +220,14 @@ const Billing: React.FC = () => {
 
   const printReceipt = (invoice: any, settings: any) => {
     const s = settings || {};
-    const businessName = s.businessName || 'SmartZone POS';
+    const businessName = s.businessName || 'SMART ZONE';
     const tagline = s.tagline || 'Your Trusted Shopping Destination';
     const address = s.address || '';
     const phone = s.phone || '';
     const email = s.email || '';
     const thankYou = s.thankYouMessage || 'Thank you for shopping with us!';
     const returnPolicy = s.returnPolicy || '';
-    const footerNote = s.footerNote || 'Powered by SmartZone POS';
+    const footerNote = s.footerNote || 'Powered by SMART ZONE';
     const logoUrl = s.logoUrl || '';
 
     const fontMapping: Record<string, string> = {
