@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Barcode } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
@@ -14,25 +14,70 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  // Guard: prevent the same scan event from firing onScan more than once
+  const hasFiredRef = useRef(false);
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader();
+    hasFiredRef.current = false;
+
+    // Hints: support common 1D and 2D barcode formats
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.QR_CODE,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.DATA_MATRIX,
+    ]);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+
+    const reader = new BrowserMultiFormatReader(hints);
     readerRef.current = reader;
 
-    reader.decodeFromVideoDevice(null, videoRef.current || null, (result, _err) => {
-      if (result) {
-        onScan(result.getText());
-        reader.reset();
-        onClose();
+    // Request the rear (environment-facing) camera explicitly for mobile compatibility
+    const startScanning = async () => {
+      try {
+        // Ask browser for rear camera via environment facingMode
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+          setScanning(true);
+
+          // Now start decoding from the already-playing video element
+          reader.decodeFromVideoElement(videoRef.current, (result, _err) => {
+            if (result && !hasFiredRef.current) {
+              hasFiredRef.current = true;
+              // Stop all tracks immediately to release camera
+              stream.getTracks().forEach(t => t.stop());
+              reader.reset();
+              onScan(result.getText());
+              onClose();
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Camera access error:', err);
+        setError('Camera not accessible. Please enter barcode manually.');
       }
-    }).then(() => {
-      setScanning(true);
-    }).catch(err => {
-      console.error('Camera access error:', err);
-      setError('Camera not accessible. Please enter barcode manually.');
-    });
+    };
+
+    startScanning();
 
     return () => {
+      // Clean up: stop any active camera stream attached to the video element
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
       reader.reset();
     };
   }, []);
