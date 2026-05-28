@@ -15,6 +15,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
   
   // Unique ID for the scanner DOM element to avoid conflicts
   const [scannerId] = useState(() => `html5-qr-reader-${Math.random().toString(36).substring(2, 9)}`);
@@ -144,9 +145,16 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           return {
             fps: 15,
             qrbox: (width: number, height: number) => {
-              // Normal square scanner box size (70% of min dimension)
-              const size = Math.round(Math.min(width, height) * 0.70);
-              return { width: size, height: size };
+              if (scanMode === 'barcode') {
+                // Thin horizontal slit for stacked barcodes / IMEIs
+                const w = Math.round(width * 0.85);
+                const h = Math.round(height * 0.25);
+                return { width: w, height: h };
+              } else {
+                // Normal square box for QR codes
+                const size = Math.round(Math.min(width, height) * 0.65);
+                return { width: size, height: size };
+              }
             },
             aspectRatio: inline ? 1.777778 : 1.333333,
             videoConstraints
@@ -209,8 +217,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
             const config = {
               fps: 15,
               qrbox: (width: number, height: number) => {
-                const size = Math.round(Math.min(width, height) * 0.70);
-                return { width: size, height: size };
+                if (scanMode === 'barcode') {
+                  const w = Math.round(width * 0.85);
+                  const h = Math.round(height * 0.25);
+                  return { width: w, height: h };
+                } else {
+                  const size = Math.round(Math.min(width, height) * 0.65);
+                  return { width: size, height: size };
+                }
               },
               aspectRatio: inline ? 1.777778 : 1.333333,
               videoConstraints: {
@@ -281,7 +295,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         }
       }
     };
-  }, [inline, retryCount, scannerId]);
+  }, [inline, retryCount, scannerId, scanMode]);
 
   const handleRetry = () => {
     setError('');
@@ -375,10 +389,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
             {scanning && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div 
-                  className="relative border border-indigo-500/30 rounded-md shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" 
+                  className="relative border border-indigo-500/30 rounded-md shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] transition-all duration-300" 
                   style={{
-                    width: '70%',
-                    aspectRatio: '1/1',
+                    width: scanMode === 'barcode' ? '85%' : '65%',
+                    height: scanMode === 'barcode' ? '25%' : undefined,
+                    aspectRatio: scanMode === 'qr' ? '1/1' : undefined,
                   }}
                 >
                   {/* Corner Brackets */}
@@ -392,11 +407,39 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                   
                   {/* Text */}
                   <div className="absolute -bottom-6 left-0 right-0 text-center">
-                    <p className="text-[9px] text-white/70 font-medium tracking-wide">Align code inside frame</p>
+                    <p className="text-[9px] text-white/70 font-medium tracking-wide">
+                      Align {scanMode === 'barcode' ? 'barcode' : 'QR code'} inside frame
+                    </p>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Mode Switcher */}
+            <div className="absolute bottom-2 left-2 flex gap-0.5 pointer-events-auto z-10 bg-black/60 p-0.5 rounded-lg ring-1 ring-white/15 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setScanMode('barcode')}
+                className={`px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wide transition-all ${
+                  scanMode === 'barcode'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                1D Barcode
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanMode('qr')}
+                className={`px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wide transition-all ${
+                  scanMode === 'qr'
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                QR Code
+              </button>
+            </div>
 
             {/* Flashlight/Torch button */}
             {isTorchSupported && (
@@ -473,10 +516,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
               {scanning && (
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                   <div 
-                    className="relative border border-indigo-500/30 rounded-lg shadow-[0_0_0_9999px_rgba(15,23,42,0.65)]" 
+                    className="relative border border-indigo-500/30 rounded-lg shadow-[0_0_0_9999px_rgba(15,23,42,0.65)] transition-all duration-300" 
                     style={{
-                      width: '70%',
-                      aspectRatio: '1/1',
+                      width: scanMode === 'barcode' ? '85%' : '65%',
+                      height: scanMode === 'barcode' ? '25%' : undefined,
+                      aspectRatio: scanMode === 'qr' ? '1/1' : undefined,
                     }}
                   >
                     {/* Corner Brackets */}
@@ -491,12 +535,38 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                     {/* Guidance Text */}
                     <div className="absolute -bottom-8 left-0 right-0 text-center">
                       <p className="text-xs text-slate-300 font-medium tracking-wide">
-                        Point camera at barcode or QR code
+                        Point camera at {scanMode === 'barcode' ? 'barcode' : 'QR code'}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
+
+              {/* Mode Switcher */}
+              <div className="absolute bottom-3 left-3 flex gap-1 pointer-events-auto z-10 bg-black/60 p-1 rounded-xl ring-1 ring-white/15 backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => setScanMode('barcode')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all ${
+                    scanMode === 'barcode'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  1D Barcode (IMEI)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScanMode('qr')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all ${
+                    scanMode === 'qr'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  QR Code
+                </button>
+              </div>
 
               {/* Flashlight/Torch button */}
               {isTorchSupported && (
