@@ -14,6 +14,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   const [manualCode, setManualCode] = useState('');
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Unique ID for the scanner DOM element to avoid conflicts
+  const [scannerId] = useState(() => `html5-qr-reader-${Math.random().toString(36).substring(2, 9)}`);
   
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const hasFiredRef = useRef(false);
@@ -33,59 +37,102 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     let qrScanner: Html5Qrcode | null = null;
 
     const initAndStart = async () => {
-      // 1. Wait a brief moment to ensure React mounts the DOM element
+      // 1. Check for Secure Context (HTTPS/localhost)
+      if (!window.isSecureContext) {
+        setError('Camera access is blocked because this connection is not secure (HTTP). Modern browsers require HTTPS (or localhost) to access the camera on mobile devices.');
+        return;
+      }
+
+      // 2. Check for Camera API support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError('Camera API is not supported in this browser. Please use Chrome, Safari, or Firefox.');
+        return;
+      }
+
+      // Wait a brief moment to ensure React mounts the DOM element
       await new Promise(resolve => setTimeout(resolve, 150));
       if (!isMounted) return;
 
-      const element = document.getElementById("html5-qr-reader");
+      const element = document.getElementById(scannerId);
       if (!element) {
         setError('Scanner element not found. Please try again.');
         return;
       }
 
       try {
-        qrScanner = new Html5Qrcode("html5-qr-reader", {
-          verbose: false,
-          useBarCodeDetectorIfSupported: true
-        });
+        // Try initializing with BarcodeDetector API (fast native android decoding)
+        try {
+          qrScanner = new Html5Qrcode(scannerId, {
+            verbose: false,
+            useBarCodeDetectorIfSupported: true
+          });
+        } catch (initErr) {
+          console.warn("Failed to init Html5Qrcode with BarcodeDetector, trying without:", initErr);
+          qrScanner = new Html5Qrcode(scannerId, {
+            verbose: false,
+            useBarCodeDetectorIfSupported: false
+          });
+        }
+        
         html5QrCodeRef.current = qrScanner;
 
-        await qrScanner.start(
-          { facingMode: { ideal: "environment" } },
-          {
-            fps: 15,
-            qrbox: (width, height) => {
-              // Custom wide box optimized for barcodes and QR codes
-              const qrWidth = Math.min(width * 0.85, inline ? 260 : 320);
-              const qrHeight = Math.min(height * 0.6, inline ? 100 : 160);
-              return { width: qrWidth, height: qrHeight };
-            },
-            aspectRatio: inline ? 1.777778 : 1.333333,
+        const scanConfig = {
+          fps: 15,
+          qrbox: (width: number, height: number) => {
+            // Wide rectangular area for barcodes & QR codes
+            const qrWidth = Math.min(width * 0.85, inline ? 260 : 320);
+            const qrHeight = Math.min(height * 0.6, inline ? 100 : 160);
+            return { width: qrWidth, height: qrHeight };
           },
-          (decodedText) => {
-            if (!hasFiredRef.current) {
-              hasFiredRef.current = true;
-              
-              // Stop the scanner first, then call callback
-              if (qrScanner && qrScanner.isScanning) {
-                qrScanner.stop().then(() => {
-                  onScanRef.current(decodedText);
-                  onCloseRef.current();
-                }).catch((e) => {
-                  console.error("Stop on scan success error:", e);
-                  onScanRef.current(decodedText);
-                  onCloseRef.current();
-                });
-              } else {
+          aspectRatio: inline ? 1.777778 : 1.333333,
+        };
+
+        const onScanSuccess = (decodedText: string) => {
+          if (!hasFiredRef.current) {
+            hasFiredRef.current = true;
+            
+            // Stop the scanner first, then call callback
+            if (qrScanner && qrScanner.isScanning) {
+              qrScanner.stop().then(() => {
                 onScanRef.current(decodedText);
                 onCloseRef.current();
+              }).catch((e) => {
+                console.error("Stop on scan success error:", e);
+                onScanRef.current(decodedText);
+                onCloseRef.current();
+              });
+            } else {
+              onScanRef.current(decodedText);
+              onCloseRef.current();
+            }
+          }
+        };
+
+        const onScanFailure = () => {
+          // Ignore verbose scanner logs (fires for unsuccessful frames)
+        };
+
+        // Try sequentially: 1. rear camera (environment), 2. front camera (user), 3. default camera
+        let started = false;
+        try {
+          await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
+          started = true;
+        } catch (envErr) {
+          console.warn("Failed starting environment camera, trying user camera:", envErr);
+          if (isMounted) {
+            try {
+              await qrScanner.start({ facingMode: "user" }, scanConfig, onScanSuccess, onScanFailure);
+              started = true;
+            } catch (userErr) {
+              console.warn("Failed starting user camera, trying default camera:", userErr);
+              if (isMounted) {
+                // Empty constraints allows the browser to default to the system default camera
+                await qrScanner.start({}, scanConfig, onScanSuccess, onScanFailure);
+                started = true;
               }
             }
-          },
-          () => {
-            // Ignore frame analysis errors/warnings (they fire on every unsuccessful frame)
           }
-        );
+        }
 
         if (!isMounted) {
           if (qrScanner && qrScanner.isScanning) {
@@ -94,22 +141,38 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           return;
         }
 
-        setScanning(true);
-
-        // Check if torch/flashlight is supported
-        try {
-          const capabilities = qrScanner.getRunningTrackCameraCapabilities();
-          if (capabilities && capabilities.torchFeature().isSupported()) {
-            setIsTorchSupported(true);
+        if (started) {
+          setScanning(true);
+          
+          // Check if torch/flashlight is supported on the active video track
+          try {
+            const capabilities = qrScanner.getRunningTrackCameraCapabilities();
+            if (capabilities && capabilities.torchFeature().isSupported()) {
+              setIsTorchSupported(true);
+            }
+          } catch (torchErr) {
+            console.log("Torch capability check failed:", torchErr);
           }
-        } catch (torchErr) {
-          console.log("Torch capability check failed:", torchErr);
         }
 
       } catch (err) {
-        console.error('Camera start error:', err);
+        console.error('Camera initialization error:', err);
         if (isMounted) {
-          setError('Camera not accessible. Please enter barcode manually.');
+          let userFriendlyError = 'Camera not accessible. Please enter barcode manually.';
+          if (err instanceof Error) {
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+              userFriendlyError = 'Camera access blocked. Please reset camera permissions in your browser/device settings.';
+            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+              userFriendlyError = 'No camera found on this device.';
+            } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+              userFriendlyError = 'Camera is already in use by another tab or app. Please close other tabs and try again.';
+            } else {
+              userFriendlyError = `Camera access error: ${err.message} (${err.name})`;
+            }
+          } else {
+            userFriendlyError = `Camera access error: ${String(err)}`;
+          }
+          setError(userFriendlyError);
         }
       }
     };
@@ -126,7 +189,15 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         }
       }
     };
-  }, [inline]);
+  }, [inline, retryCount, scannerId]);
+
+  const handleRetry = () => {
+    setError('');
+    setScanning(false);
+    setIsTorchSupported(false);
+    setIsTorchOn(false);
+    setRetryCount(prev => prev + 1);
+  };
 
   const toggleTorch = async () => {
     if (!html5QrCodeRef.current || !isTorchSupported) return;
@@ -165,13 +236,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     return (
       <div className="bg-slate-900 text-white rounded-xl p-3 border border-indigo-500/30 shadow-inner relative animate-in fade-in slide-in-from-top duration-300">
         <style dangerouslySetInnerHTML={{__html: `
-          #html5-qr-reader video {
+          .html5-qr-container video {
             width: 100% !important;
             height: 100% !important;
             object-fit: cover !important;
             border-radius: 0.5rem;
           }
-          #html5-qr-reader canvas {
+          .html5-qr-container canvas {
             display: none !important;
           }
           @keyframes scan-laser {
@@ -194,12 +265,19 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         </div>
 
         {error ? (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-xs text-red-400">
-            {error}
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400 flex flex-col gap-2">
+            <p className="leading-relaxed">{error}</p>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-semibold w-fit transition-colors shadow hover:shadow-indigo-500/20"
+            >
+              Retry Camera
+            </button>
           </div>
         ) : (
           <div className="relative rounded-lg overflow-hidden bg-black aspect-video max-h-40 border border-white/5">
-            <div id="html5-qr-reader" className="w-full h-full" />
+            <div id={scannerId} className="w-full h-full html5-qr-container" />
             
             {/* Custom Overlay */}
             {scanning && (
@@ -252,15 +330,15 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <style dangerouslySetInnerHTML={{__html: `
-        #html5-qr-reader video {
+        .html5-qr-container video {
           width: 100% !important;
           height: 100% !important;
           object-fit: cover !important;
           border-radius: 0.75rem;
         }
-        #html5-qr-reader canvas {
+        .html5-qr-container canvas {
           display: none !important;
         }
         @keyframes scan-laser {
@@ -272,7 +350,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           animation: scan-laser 2s infinite linear;
         }
       `}} />
-      <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between p-4 border-b border-slate-800/80">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
@@ -287,12 +365,19 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
 
         <div className="p-4">
           {error ? (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4 text-sm text-red-400">
-              {error}
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-4 text-sm text-red-400 flex flex-col gap-3">
+              <p className="leading-relaxed font-medium">{error}</p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-lg text-xs font-semibold w-fit transition-colors shadow-lg shadow-indigo-600/20"
+              >
+                Retry Camera
+              </button>
             </div>
           ) : (
             <div className="relative rounded-xl overflow-hidden bg-black mb-4 border border-slate-800" style={{ aspectRatio: '4/3' }}>
-              <div id="html5-qr-reader" className="w-full h-full" />
+              <div id={scannerId} className="w-full h-full html5-qr-container" />
               
               {/* Custom Overlay */}
               {scanning && (
