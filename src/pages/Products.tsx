@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const CATEGORIES = ['Electronics', 'Accessories', 'Clothing', 'Food & Beverage', 'Health & Beauty', 'Home & Garden', 'Sports', 'Toys', 'Books', 'Other'];
+const CATEGORIES = ['Electronics', 'Accessories', 'Clothing', 'Food & Beverage', 'Health & Beauty', 'Home & Garden', 'Sports', 'Toys', 'Books', 'Router', 'Other'];
 const ITEMS_PER_PAGE = 12;
 
 interface ProductStats {
@@ -35,7 +35,7 @@ const Products: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [scanTarget, setScanTarget] = useState<'form' | 'search'>('search');
+  const [scanTarget, setScanTarget] = useState<'form' | 'search' | 'imei' | 'adjustImei'>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [saving, setSaving] = useState(false);
@@ -50,6 +50,14 @@ const Products: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [filterStock, setFilterStock] = useState<'all' | 'low' | 'out'>('all');
+
+  // Router IMEI state (for Add/Edit form)
+  const [imeiList, setImeiList] = useState<string[]>([]);
+  const [imeiInput, setImeiInput] = useState('');
+
+  // Router IMEI state (for Stock Adjustment modal)
+  const [adjustImeiList, setAdjustImeiList] = useState<string[]>([]);
+  const [adjustImeiInput, setAdjustImeiInput] = useState('');
 
   // Supplier transaction states
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
@@ -73,6 +81,7 @@ const Products: React.FC = () => {
   const [payModalProcessing, setPayModalProcessing] = useState<boolean>(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>();
+  const watchCategory = watch('category');
 
   const generateNextBarcode = useCallback(() => {
     const numericBarcodes = products
@@ -124,6 +133,19 @@ const Products: React.FC = () => {
     setShowScanner(false);
     if (scanTarget === 'form') {
       setValue('barcode', barcode);
+    } else if (scanTarget === 'imei') {
+      // Add scanned value directly to IMEI list
+      const trimmed = barcode.trim();
+      if (!trimmed) return;
+      if (imeiList.includes(trimmed)) { toast.error('This IMEI is already in the list'); return; }
+      setImeiList(prev => [...prev, trimmed]);
+      toast.success(`IMEI added: ${trimmed}`);
+    } else if (scanTarget === 'adjustImei') {
+      const trimmed = barcode.trim();
+      if (!trimmed) return;
+      if (adjustImeiList.includes(trimmed)) { toast.error('This IMEI is already in the list'); return; }
+      setAdjustImeiList(prev => [...prev, trimmed]);
+      toast.success(`IMEI added: ${trimmed}`);
     } else {
       setSearchQuery(barcode);
     }
@@ -148,6 +170,8 @@ const Products: React.FC = () => {
     setSelectedSupplierId('');
     setIsPaidInFull(true);
     setAmountPaid(0);
+    setImeiList([]);
+    setImeiInput('');
     setShowForm(true);
   };
 
@@ -157,6 +181,8 @@ const Products: React.FC = () => {
     setAdjustSupplierId(product.supplierId || '');
     setAdjustIsPaidInFull(true);
     setAdjustAmountPaid(0);
+    setAdjustImeiList([]);
+    setAdjustImeiInput('');
   };
 
   const handleEdit = (product: Product) => {
@@ -165,11 +191,34 @@ const Products: React.FC = () => {
     setSelectedSupplierId(product.supplierId || '');
     setIsPaidInFull(true);
     setAmountPaid(0);
+    setImeiList(product.imeiNumbers || []);
+    setImeiInput('');
     setShowForm(true);
     setActiveDropdown(null);
   };
 
+  // ── IMEI helpers ────────────────────────────────────────────────────────
+  const addImei = (list: string[], input: string, setList: (l: string[]) => void, setInput: (s: string) => void) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    if (list.includes(trimmed)) { toast.error('This IMEI is already in the list'); return; }
+    setList([...list, trimmed]);
+    setInput('');
+  };
+
+  const removeImei = (list: string[], index: number, setList: (l: string[]) => void) => {
+    setList(list.filter((_, i) => i !== index));
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
   const onSubmit = async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    // For Router category, stock is determined by IMEI count
+    const isRouter = data.category === 'Router';
+    if (isRouter && imeiList.length === 0) {
+      toast.error('Please add at least one IMEI number for the Router');
+      setSaving(false);
+      return;
+    }
     setSaving(true);
     try {
       const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId);
@@ -177,11 +226,13 @@ const Products: React.FC = () => {
         ...data,
         price: Number(data.price),
         costPrice: Number(data.costPrice),
-        stock: Number(data.stock),
+        stock: isRouter ? imeiList.length : Number(data.stock),
         minStock: Number(data.minStock),
         warrantyMonths: Number(data.warrantyMonths || 0),
+        unit: isRouter ? 'pcs' : data.unit,
         supplierId: selectedSupplierId || undefined,
         supplierName: selectedSupplier?.name || undefined,
+        imeiNumbers: isRouter ? imeiList : undefined,
       };
 
       if (editingProduct) {
@@ -207,6 +258,8 @@ const Products: React.FC = () => {
       setSelectedSupplierId('');
       setIsPaidInFull(true);
       setAmountPaid(0);
+      setImeiList([]);
+      setImeiInput('');
       loadProducts();
       loadSuppliersData();
     } catch (error) { toast.error('Failed to save product'); }
@@ -456,6 +509,31 @@ const Products: React.FC = () => {
 
   const handleStockAdjust = async () => {
     if (!showStockModal) return;
+    const isRouter = showStockModal.category === 'Router';
+
+    if (isRouter) {
+      // For Router: merge existing IMEIs + newly added IMEIs
+      if (adjustImeiList.length === 0) {
+        toast.error('Please add at least one IMEI number');
+        return;
+      }
+      try {
+        const existingImeis = showStockModal.imeiNumbers || [];
+        const merged = [...existingImeis, ...adjustImeiList];
+        const newStock = merged.length;
+        await updateProductStock(showStockModal.id, newStock);
+        // Also persist IMEI list via updateProduct
+        const { updateProduct: updateProd } = await import('../firebase/firestore');
+        await updateProd(showStockModal.id, { imeiNumbers: merged } as any);
+        toast.success(`Stock updated! Added ${adjustImeiList.length} IMEI(s). Total: ${newStock}`);
+        setShowStockModal(null);
+        setAdjustImeiList([]);
+        setAdjustImeiInput('');
+        loadProducts();
+      } catch (error) { toast.error('Failed to update stock'); }
+      return;
+    }
+
     try {
       await updateProductStock(showStockModal.id, showStockModal.stock + stockAdjust);
 
@@ -1090,37 +1168,119 @@ const Products: React.FC = () => {
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-amber-500" /> Stock & Inventory
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Stock Qty <span className="text-red-400">*</span></label>
-                    <input type="number" {...register('stock', { required: 'Stock is required', min: { value: 0, message: 'Must be ≥ 0' } })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.stock ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="0" />
-                    {errors.stock && <p className="text-xs text-red-500 mt-1">{errors.stock.message}</p>}
+
+                {watchCategory === 'Router' ? (
+                  /* ── ROUTER: IMEI-based stock ── */
+                  <div className="space-y-4">
+                    {/* IMEI Entry */}
+                    <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Smartphone className="w-4 h-4 text-blue-600" />
+                        <span className="text-sm font-semibold text-blue-800">IMEI Numbers</span>
+                        <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
+                          {imeiList.length} unit{imeiList.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <p className="text-xs text-blue-600 mb-3">Scan or type each router's IMEI. Stock = number of IMEIs added.</p>
+
+                      {/* Input row */}
+                      <div className="flex gap-2 mb-3">
+                        <input
+                          type="text"
+                          value={imeiInput}
+                          onChange={e => setImeiInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addImei(imeiList, imeiInput, setImeiList, setImeiInput); } }}
+                          className="flex-1 px-4 py-2.5 border border-blue-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                          placeholder="Type or scan IMEI and press Enter / Add"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { setScanTarget('imei'); setShowScanner(true); }}
+                          className="px-3 py-2.5 border border-blue-200 bg-white rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all"
+                          title="Scan IMEI barcode"
+                        >
+                          <Barcode className="w-4 h-4 text-blue-500" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addImei(imeiList, imeiInput, setImeiList, setImeiInput)}
+                          className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {/* IMEI list */}
+                      {imeiList.length > 0 ? (
+                        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                          {imeiList.map((imei, idx) => (
+                            <div key={idx} className="flex items-center justify-between bg-white border border-blue-100 rounded-xl px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-blue-400 w-6">{idx + 1}.</span>
+                                <span className="text-sm font-mono text-gray-700">{imei}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeImei(imeiList, idx, setImeiList)}
+                                className="p-1 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-blue-400 text-xs">No IMEIs added yet. Add at least one to set stock.</div>
+                      )}
+                    </div>
+
+                    {/* Min Stock + Warranty for Router */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Stock Alert <span className="text-red-400">*</span></label>
+                        <input type="number" {...register('minStock', { required: 'Min stock is required', min: { value: 0, message: 'Must be ≥ 0' } })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.minStock ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="5" />
+                        {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Warranty (months)</label>
+                        <input type="number" {...register('warrantyMonths')} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="0" />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Stock Alert <span className="text-red-400">*</span></label>
-                    <input type="number" {...register('minStock', { required: 'Min stock is required', min: { value: 0, message: 'Must be ≥ 0' } })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.minStock ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="5" />
-                    {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
+                ) : (
+                  /* ── Standard stock fields ── */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Stock Qty <span className="text-red-400">*</span></label>
+                      <input type="number" {...register('stock', { required: 'Stock is required', min: { value: 0, message: 'Must be ≥ 0' } })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.stock ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="0" />
+                      {errors.stock && <p className="text-xs text-red-500 mt-1">{errors.stock.message}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Stock Alert <span className="text-red-400">*</span></label>
+                      <input type="number" {...register('minStock', { required: 'Min stock is required', min: { value: 0, message: 'Must be ≥ 0' } })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.minStock ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="5" />
+                      {errors.minStock && <p className="text-xs text-red-500 mt-1">{errors.minStock.message}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Unit <span className="text-red-400">*</span></label>
+                      <select {...register('unit', { required: 'Unit is required' })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm cursor-pointer ${errors.unit ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
+                        <option value="">Select unit</option>
+                        <option value="pcs">Pieces</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="g">Grams</option>
+                        <option value="l">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="box">Box</option>
+                        <option value="pack">Pack</option>
+                        <option value="set">Set</option>
+                      </select>
+                      {errors.unit && <p className="text-xs text-red-500 mt-1">{errors.unit.message}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Warranty (months)</label>
+                      <input type="number" {...register('warrantyMonths')} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="0" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Unit <span className="text-red-400">*</span></label>
-                    <select {...register('unit', { required: 'Unit is required' })} className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm cursor-pointer ${errors.unit ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
-                      <option value="">Select unit</option>
-                      <option value="pcs">Pieces</option>
-                      <option value="kg">Kilograms</option>
-                      <option value="g">Grams</option>
-                      <option value="l">Liters</option>
-                      <option value="ml">Milliliters</option>
-                      <option value="box">Box</option>
-                      <option value="pack">Pack</option>
-                      <option value="set">Set</option>
-                    </select>
-                    {errors.unit && <p className="text-xs text-red-500 mt-1">{errors.unit.message}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Warranty (months)</label>
-                    <input type="number" {...register('warrantyMonths')} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="0" />
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Media Section */}
@@ -1276,7 +1436,7 @@ const Products: React.FC = () => {
       {/* Stock Adjustment Modal */}
       {showStockModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowStockModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center gap-3 mb-1">
                 <div className="p-2.5 bg-emerald-50 rounded-xl">
@@ -1292,115 +1452,213 @@ const Products: React.FC = () => {
                 <p className="text-3xl font-bold text-gray-800">{showStockModal.stock} <span className="text-lg font-normal text-gray-400">{showStockModal.unit}</span></p>
               </div>
 
-              <div className="flex items-center justify-center gap-4 mb-6">
-                <button
-                  type="button"
-                  onClick={() => setStockAdjust(a => a - 1)}
-                  className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all text-xl font-bold"
-                >
-                  −
-                </button>
-                <div className="text-center">
-                  <input
-                    type="number"
-                    value={stockAdjust}
-                    onChange={e => setStockAdjust(Number(e.target.value))}
-                    className="w-24 text-center text-2xl font-bold border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none py-1 bg-transparent text-gray-800"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">adjustment</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setStockAdjust(a => a + 1)}
-                  className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-500 hover:bg-emerald-50 transition-all text-xl font-bold"
-                >
-                  +
-                </button>
-              </div>
+              {showStockModal.category === 'Router' ? (
+                /* ── ROUTER: IMEI-based stock adjust ── */
+                <div className="space-y-4">
+                  <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Smartphone className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-blue-800">Add New IMEI Numbers</span>
+                      <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
+                        +{adjustImeiList.length}
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-600 mb-3">Existing: {showStockModal.imeiNumbers?.length || 0} IMEI(s). New total will be {(showStockModal.imeiNumbers?.length || 0) + adjustImeiList.length}.</p>
 
-              <div className="bg-gray-50 rounded-xl p-3 text-center mb-6">
-                <p className="text-sm text-gray-500">New Stock Level</p>
-                <p className={`text-2xl font-bold ${showStockModal.stock + stockAdjust <= 0 ? 'text-red-500' : showStockModal.stock + stockAdjust <= showStockModal.minStock ? 'text-amber-500' : 'text-emerald-600'}`}>
-                  {Math.max(0, showStockModal.stock + stockAdjust)} {showStockModal.unit}
-                </p>
-              </div>
+                    {/* Input row */}
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={adjustImeiInput}
+                        onChange={e => setAdjustImeiInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addImei(adjustImeiList, adjustImeiInput, setAdjustImeiList, setAdjustImeiInput); } }}
+                        className="flex-1 px-4 py-2.5 border border-blue-200 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                        placeholder="Type or scan IMEI and press Enter / Add"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setScanTarget('adjustImei'); setShowScanner(true); }}
+                        className="px-3 py-2.5 border border-blue-200 bg-white rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all"
+                        title="Scan IMEI"
+                      >
+                        <Barcode className="w-4 h-4 text-blue-500" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addImei(adjustImeiList, adjustImeiInput, setAdjustImeiList, setAdjustImeiInput)}
+                        className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all"
+                      >
+                        Add
+                      </button>
+                    </div>
 
-              {/* Supplier Selection for Stock Adjustment (Only if adding stock) */}
-              {stockAdjust > 0 && suppliers.length > 0 && (
-                <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier (Optional)</label>
-                    <select
-                      value={adjustSupplierId}
-                      onChange={e => setAdjustSupplierId(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
-                    >
-                      <option value="">-- Select Supplier --</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
-                      ))}
-                    </select>
-                    {adjustSupplierId && (
-                      <p className="text-[11px] text-violet-600 font-semibold mt-1">
-                        Current Outstanding Balance: Rs. {suppliers.find(s => s.id === adjustSupplierId)?.balance.toLocaleString() || 0}
-                      </p>
+                    {/* New IMEI list */}
+                    {adjustImeiList.length > 0 ? (
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {adjustImeiList.map((imei, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-white border border-blue-100 rounded-xl px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-blue-400 w-6">{idx + 1}.</span>
+                              <span className="text-sm font-mono text-gray-700">{imei}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeImei(adjustImeiList, idx, setAdjustImeiList)}
+                              className="p-1 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-3 text-blue-400 text-xs">No new IMEIs added yet.</div>
                     )}
                   </div>
-                  {adjustSupplierId && (
-                    <div className="space-y-3">
-                      <label className="block text-sm font-medium text-gray-700">Payment Status</label>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setAdjustIsPaidInFull(true)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${adjustIsPaidInFull ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'}`}
-                        >
-                          Paid in Full
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAdjustIsPaidInFull(false)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${!adjustIsPaidInFull ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}
-                        >
-                          Partial Payment
-                        </button>
+
+                  {/* Existing IMEIs (collapsed view) */}
+                  {showStockModal.imeiNumbers && showStockModal.imeiNumbers.length > 0 && (
+                    <details className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                      <summary className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
+                        View existing {showStockModal.imeiNumbers.length} IMEI(s)
+                      </summary>
+                      <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                        {showStockModal.imeiNumbers.map((imei, idx) => (
+                          <div key={idx} className="flex items-center gap-2 px-2 py-1 bg-white border border-gray-100 rounded-lg">
+                            <span className="text-xs text-gray-400 w-5">{idx + 1}.</span>
+                            <span className="text-xs font-mono text-gray-600">{imei}</span>
+                          </div>
+                        ))}
                       </div>
-                      {!adjustIsPaidInFull && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (Rs.)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={adjustAmountPaid}
-                            onChange={e => setAdjustAmountPaid(Number(e.target.value))}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-                            placeholder="0"
-                          />
-                          <p className="text-xs text-amber-600 mt-1">Remaining unpaid balance (Cost Price: Rs. {(showStockModal.costPrice * stockAdjust).toLocaleString()}) will be added to the supplier\'s outstanding amount.</p>
+                    </details>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setShowStockModal(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors">Cancel</button>
+                    <button
+                      type="button"
+                      onClick={handleStockAdjust}
+                      disabled={adjustImeiList.length === 0}
+                      className="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-40 shadow-lg shadow-blue-200"
+                    >
+                      Add {adjustImeiList.length} IMEI(s) to Stock
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ── Standard stock adjustment ── */
+                <div>
+                  <div className="flex items-center justify-center gap-4 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => setStockAdjust(a => a - 1)}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all text-xl font-bold"
+                    >
+                      −
+                    </button>
+                    <div className="text-center">
+                      <input
+                        type="number"
+                        value={stockAdjust}
+                        onChange={e => setStockAdjust(Number(e.target.value))}
+                        className="w-24 text-center text-2xl font-bold border-b-2 border-gray-200 focus:border-indigo-500 focus:outline-none py-1 bg-transparent text-gray-800"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">adjustment</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStockAdjust(a => a + 1)}
+                      className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-500 hover:bg-emerald-50 transition-all text-xl font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-3 text-center mb-6">
+                    <p className="text-sm text-gray-500">New Stock Level</p>
+                    <p className={`text-2xl font-bold ${showStockModal.stock + stockAdjust <= 0 ? 'text-red-500' : showStockModal.stock + stockAdjust <= showStockModal.minStock ? 'text-amber-500' : 'text-emerald-600'}`}>
+                      {Math.max(0, showStockModal.stock + stockAdjust)} {showStockModal.unit}
+                    </p>
+                  </div>
+
+                  {/* Supplier Selection for Stock Adjustment (Only if adding stock) */}
+                  {stockAdjust > 0 && suppliers.length > 0 && (
+                    <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 space-y-4 mb-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Supplier (Optional)</label>
+                        <select
+                          value={adjustSupplierId}
+                          onChange={e => setAdjustSupplierId(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white cursor-pointer"
+                        >
+                          <option value="">-- Select Supplier --</option>
+                          {suppliers.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}{s.company ? ` (${s.company})` : ''}</option>
+                          ))}
+                        </select>
+                        {adjustSupplierId && (
+                          <p className="text-[11px] text-violet-600 font-semibold mt-1">
+                            Current Outstanding Balance: Rs. {suppliers.find(s => s.id === adjustSupplierId)?.balance.toLocaleString() || 0}
+                          </p>
+                        )}
+                      </div>
+                      {adjustSupplierId && (
+                        <div className="space-y-3">
+                          <label className="block text-sm font-medium text-gray-700">Payment Status</label>
+                          <div className="flex gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setAdjustIsPaidInFull(true)}
+                              className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${adjustIsPaidInFull ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'}`}
+                            >
+                              Paid in Full
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAdjustIsPaidInFull(false)}
+                              className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${!adjustIsPaidInFull ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}
+                            >
+                              Partial Payment
+                            </button>
+                          </div>
+                          {!adjustIsPaidInFull && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Paid (Rs.)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={adjustAmountPaid}
+                                onChange={e => setAdjustAmountPaid(Number(e.target.value))}
+                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                                placeholder="0"
+                              />
+                              <p className="text-xs text-amber-600 mt-1">Remaining unpaid balance (Cost Price: Rs. {(showStockModal.costPrice * stockAdjust).toLocaleString()}) will be added to the supplier\'s outstanding amount.</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   )}
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowStockModal(null)}
+                      className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStockAdjust}
+                      disabled={stockAdjust === 0}
+                      className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-40 shadow-lg shadow-emerald-200"
+                    >
+                      Update Stock
+                    </button>
+                  </div>
                 </div>
               )}
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowStockModal(null)}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleStockAdjust}
-                  disabled={stockAdjust === 0}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl text-sm font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-40 shadow-lg shadow-emerald-200"
-                >
-                  Update Stock
-                </button>
-              </div>
             </div>
           </div>
         </div>

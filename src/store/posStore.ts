@@ -16,6 +16,7 @@ export interface Product {
   imageUrl?: string;
   supplierId?: string;
   supplierName?: string;
+  imeiNumbers?: string[];
   createdAt: string;
   updatedAt: string;
 }
