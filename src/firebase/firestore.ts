@@ -1,7 +1,7 @@
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDoc,
   getDocs, query, where, orderBy, limit,
-  setDoc, increment
+  setDoc, increment, arrayRemove, arrayUnion
 } from 'firebase/firestore';
 import { db } from './config';
 import { Product, Customer, Invoice, Voucher, WarrantyClaim, Supplier, SupplierPayment } from '../store/posStore';
@@ -175,10 +175,19 @@ export const createInvoice = async (invoice: any) => {
     try {
       if (!item?.product?.id) continue;
       const productRef = doc(db, COLLECTIONS.PRODUCTS, item.product.id);
-      await updateDoc(productRef, {
-        stock: Math.max(0, (item.product.stock || 0) - (item.quantity || 1)),
-        updatedAt: new Date().toISOString(),
-      });
+      if (item.imeiNumber) {
+        // IMEI product: remove the specific IMEI from the array and decrement stock
+        await updateDoc(productRef, {
+          imeiNumbers: arrayRemove(item.imeiNumber),
+          stock: Math.max(0, (item.product.stock || 0) - 1),
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        await updateDoc(productRef, {
+          stock: Math.max(0, (item.product.stock || 0) - (item.quantity || 1)),
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (err) {
       console.warn('Stock update failed for product:', item?.product?.id, err);
     }
@@ -480,10 +489,19 @@ export const deleteInvoice = async (id: string) => {
         try {
           if (!item?.product?.id) continue;
           const productRef = doc(db, COLLECTIONS.PRODUCTS, item.product.id);
-          await updateDoc(productRef, {
-            stock: increment(item.quantity || 1),
-            updatedAt: new Date().toISOString(),
-          });
+          if (item.imeiNumber) {
+            // IMEI product: restore IMEI back to the array
+            await updateDoc(productRef, {
+              imeiNumbers: arrayUnion(item.imeiNumber),
+              stock: increment(1),
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            await updateDoc(productRef, {
+              stock: increment(item.quantity || 1),
+              updatedAt: new Date().toISOString(),
+            });
+          }
         } catch (err) {
           console.warn('Stock reversion failed for deleted invoice item:', item?.product?.id, err);
         }

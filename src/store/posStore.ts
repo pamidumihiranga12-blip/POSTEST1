@@ -26,6 +26,7 @@ export interface CartItem {
   quantity: number;
   discount: number;
   total: number;
+  imeiNumber?: string;  // selected IMEI/serial for IMEI-tracked products
 }
 
 export interface Customer {
@@ -119,10 +120,10 @@ interface CartState {
   cart: CartItem[];
   selectedCustomer: Customer | null;
   appliedVoucher: Voucher | null;
-  addToCart: (product: Product, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  updateDiscount: (productId: string, discount: number) => void;
+  addToCart: (product: Product, quantity?: number, imeiNumber?: string) => void;
+  removeFromCart: (productId: string, imeiNumber?: string) => void;
+  updateQuantity: (productId: string, quantity: number, imeiNumber?: string) => void;
+  updateDiscount: (productId: string, discount: number, imeiNumber?: string) => void;
   clearCart: () => void;
   setCustomer: (customer: Customer | null) => void;
   setVoucher: (voucher: Voucher | null) => void;
@@ -137,13 +138,29 @@ export const usePosStore = create<CartState>()(
       cart: [],
       selectedCustomer: null,
       appliedVoucher: null,
-      addToCart: (product, quantity = 1) => {
+      addToCart: (product, quantity = 1, imeiNumber?: string) => {
         const { cart } = get();
-        const existingItem = cart.find(item => item.product.id === product.id);
+        // IMEI products: each IMEI is a separate cart entry (unique by imeiNumber)
+        if (imeiNumber) {
+          const alreadyIn = cart.find(item => item.imeiNumber === imeiNumber);
+          if (alreadyIn) return; // already in cart
+          set({
+            cart: [...cart, {
+              product,
+              quantity: 1,
+              discount: 0,
+              total: product.price,
+              imeiNumber,
+            }]
+          });
+          return;
+        }
+        // Non-IMEI products: stack quantities
+        const existingItem = cart.find(item => item.product.id === product.id && !item.imeiNumber);
         if (existingItem) {
           set({
             cart: cart.map(item =>
-              item.product.id === product.id
+              item.product.id === product.id && !item.imeiNumber
                 ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * item.product.price * (1 - item.discount / 100) }
                 : item
             )
@@ -159,22 +176,26 @@ export const usePosStore = create<CartState>()(
           });
         }
       },
-      removeFromCart: (productId) => {
-        set({ cart: get().cart.filter(item => item.product.id !== productId) });
+      removeFromCart: (productId, imeiNumber?: string) => {
+        set({ cart: get().cart.filter(item =>
+          imeiNumber
+            ? item.imeiNumber !== imeiNumber
+            : item.product.id !== productId || !!item.imeiNumber
+        ) });
       },
-      updateQuantity: (productId, quantity) => {
+      updateQuantity: (productId, quantity, imeiNumber?: string) => {
         set({
           cart: get().cart.map(item =>
-            item.product.id === productId
+            item.product.id === productId && (imeiNumber ? item.imeiNumber === imeiNumber : !item.imeiNumber)
               ? { ...item, quantity, total: quantity * item.product.price * (1 - item.discount / 100) }
               : item
           ).filter(item => item.quantity > 0)
         });
       },
-      updateDiscount: (productId, discount) => {
+      updateDiscount: (productId, discount, imeiNumber?: string) => {
         set({
           cart: get().cart.map(item =>
-            item.product.id === productId
+            item.product.id === productId && (imeiNumber ? item.imeiNumber === imeiNumber : !item.imeiNumber)
               ? { ...item, discount, total: item.quantity * item.product.price * (1 - discount / 100) }
               : item
           )
