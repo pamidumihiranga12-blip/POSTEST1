@@ -37,26 +37,26 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     let isMounted = true;
     let qrScanner: Html5Qrcode | null = null;
 
-    // Explicit list of all supported formats we want to decode
-    const formatsToSupport = [
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.AZTEC,
-      Html5QrcodeSupportedFormats.CODABAR,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-      Html5QrcodeSupportedFormats.MAXICODE,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.PDF_417,
-      Html5QrcodeSupportedFormats.RSS_14,
-      Html5QrcodeSupportedFormats.RSS_EXPANDED,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION
-    ];
+    // Explicitly optimize the formats list depending on scanMode.
+    // Specifying fewer formats drastically improves decoding performance and speed on mobile.
+    const formatsToSupport = scanMode === 'barcode'
+      ? [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR
+        ]
+      : [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.AZTEC,
+          Html5QrcodeSupportedFormats.PDF_417
+        ];
 
     const initAndStart = async () => {
       // 1. Check for Secure Context (HTTPS/localhost)
@@ -82,19 +82,24 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
       }
 
       try {
-        // Try initializing with BarcodeDetector API (fast native android decoding)
+        // Try initializing with native BarcodeDetector API (extremely fast and accurate native ML Kit decoding on Android/Chrome)
+        // Note: html5-qrcode expects this option in experimentalFeatures object.
         try {
           qrScanner = new Html5Qrcode(scannerId, {
             formatsToSupport,
             verbose: false,
-            useBarCodeDetectorIfSupported: true
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
           });
         } catch (initErr) {
           console.warn("Failed to init Html5Qrcode with BarcodeDetector, trying without:", initErr);
           qrScanner = new Html5Qrcode(scannerId, {
             formatsToSupport,
             verbose: false,
-            useBarCodeDetectorIfSupported: false
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: false
+            }
           });
         }
         
@@ -133,7 +138,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         const buildScanConfig = (deviceId?: string, forceFacingMode?: boolean) => {
           const videoConstraints: MediaTrackConstraints = {
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            // Request continuous autofocus across Android Chrome / iOS Safari
+            // @ts-ignore
+            focusMode: { ideal: "continuous" },
+            // @ts-ignore
+            advanced: [{ focusMode: "continuous" }]
           };
 
           if (deviceId && !forceFacingMode) {
@@ -143,7 +153,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           }
 
           return {
-            fps: 15,
+            fps: 25, // increase capturing frame rate for faster autofocus/decoding iterations
             qrbox: (width: number, height: number) => {
               if (scanMode === 'barcode') {
                 // Thin horizontal slit for stacked barcodes / IMEIs
@@ -215,7 +225,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         if (!started && isMounted) {
           try {
             const config = {
-              fps: 15,
+              fps: 25,
               qrbox: (width: number, height: number) => {
                 if (scanMode === 'barcode') {
                   const w = Math.round(width * 0.85);
@@ -229,7 +239,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
               aspectRatio: inline ? 1.777778 : 1.333333,
               videoConstraints: {
                 width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                height: { ideal: 1080 },
+                // @ts-ignore
+                focusMode: { ideal: "continuous" },
+                // @ts-ignore
+                advanced: [{ focusMode: "continuous" }]
               }
             };
             await qrScanner.start({}, config, onScanSuccess, onScanFailure);
