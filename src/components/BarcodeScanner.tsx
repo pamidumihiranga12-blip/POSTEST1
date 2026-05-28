@@ -15,7 +15,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
   
   // Unique ID for the scanner DOM element to avoid conflicts
   const [scannerId] = useState(() => `html5-qr-reader-${Math.random().toString(36).substring(2, 9)}`);
@@ -37,26 +36,23 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     let isMounted = true;
     let qrScanner: Html5Qrcode | null = null;
 
-    // Explicitly optimize the formats list depending on scanMode.
-    // Specifying fewer formats drastically improves decoding performance and speed on mobile.
-    const formatsToSupport = scanMode === 'barcode'
-      ? [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.CODABAR
-        ]
-      : [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-          Html5QrcodeSupportedFormats.AZTEC,
-          Html5QrcodeSupportedFormats.PDF_417
-        ];
+    // Support both 1D and 2D formats simultaneously so the user can scan any barcode, IMEI, SN, or QR code
+    // without switching modes or running into empty-result bugs.
+    const formatsToSupport = [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.AZTEC,
+      Html5QrcodeSupportedFormats.PDF_417,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.CODABAR
+    ];
 
     const initAndStart = async () => {
       // 1. Check for Secure Context (HTTPS/localhost)
@@ -82,26 +78,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
       }
 
       try {
-        // Try initializing with native BarcodeDetector API (extremely fast and accurate native ML Kit decoding on Android/Chrome)
-        // Note: html5-qrcode expects this option in experimentalFeatures object.
-        try {
-          qrScanner = new Html5Qrcode(scannerId, {
-            formatsToSupport,
-            verbose: false,
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true
-            }
-          });
-        } catch (initErr) {
-          console.warn("Failed to init Html5Qrcode with BarcodeDetector, trying without:", initErr);
-          qrScanner = new Html5Qrcode(scannerId, {
-            formatsToSupport,
-            verbose: false,
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: false
-            }
-          });
-        }
+        // Enforce the built-in javascript-based ZXing decoder by setting useBarCodeDetectorIfSupported to false.
+        // This is critical because Chrome's native BarcodeDetector API often fails to return 1D barcode decodes
+        // on mobile if Google Play Services hasn't downloaded the models.
+        qrScanner = new Html5Qrcode(scannerId, {
+          formatsToSupport,
+          verbose: false,
+          useBarCodeDetectorIfSupported: false
+        });
         
         html5QrCodeRef.current = qrScanner;
 
@@ -137,13 +121,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         // directly inside the videoConstraints object itself.
         const buildScanConfig = (deviceId?: string, forceFacingMode?: boolean) => {
           const videoConstraints: MediaTrackConstraints = {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            // Request continuous autofocus across Android Chrome / iOS Safari
-            // @ts-ignore
-            focusMode: { ideal: "continuous" },
-            // @ts-ignore
-            advanced: [{ focusMode: "continuous" }]
+            width: { ideal: 1280 }, // 720p is highly stable and fast to decode across all phone chipsets
+            height: { ideal: 720 }
           };
 
           if (deviceId && !forceFacingMode) {
@@ -153,18 +132,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           }
 
           return {
-            fps: 25, // increase capturing frame rate for faster autofocus/decoding iterations
+            fps: 15,
             qrbox: (width: number, height: number) => {
-              if (scanMode === 'barcode') {
-                // Thin horizontal slit for stacked barcodes / IMEIs
-                const w = Math.round(width * 0.85);
-                const h = Math.round(height * 0.25);
-                return { width: w, height: h };
-              } else {
-                // Normal square box for QR codes
-                const size = Math.round(Math.min(width, height) * 0.65);
-                return { width: size, height: size };
-              }
+              // Optimized rectangular viewport: wide enough to scan horizontal 1D barcodes (IMEI/SN)
+              // and tall enough to capture 2D QR codes in a single frame.
+              const w = Math.round(width * 0.82);
+              const h = Math.round(height * 0.42);
+              return { width: w, height: h };
             },
             aspectRatio: inline ? 1.777778 : 1.333333,
             videoConstraints
@@ -221,29 +195,20 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           }
         }
 
-        // Attempt 3: Let browser pick the default camera but request 1080p (ultimate fallback)
+        // Attempt 3: Let browser pick the default camera but request 720p (ultimate fallback)
         if (!started && isMounted) {
           try {
             const config = {
-              fps: 25,
+              fps: 15,
               qrbox: (width: number, height: number) => {
-                if (scanMode === 'barcode') {
-                  const w = Math.round(width * 0.85);
-                  const h = Math.round(height * 0.25);
-                  return { width: w, height: h };
-                } else {
-                  const size = Math.round(Math.min(width, height) * 0.65);
-                  return { width: size, height: size };
-                }
+                const w = Math.round(width * 0.82);
+                const h = Math.round(height * 0.42);
+                return { width: w, height: h };
               },
               aspectRatio: inline ? 1.777778 : 1.333333,
               videoConstraints: {
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                // @ts-ignore
-                focusMode: { ideal: "continuous" },
-                // @ts-ignore
-                advanced: [{ focusMode: "continuous" }]
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
               }
             };
             await qrScanner.start({}, config, onScanSuccess, onScanFailure);
@@ -309,7 +274,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         }
       }
     };
-  }, [inline, retryCount, scannerId, scanMode]);
+  }, [inline, retryCount, scannerId]);
 
   const handleRetry = () => {
     setError('');
@@ -405,9 +370,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                 <div 
                   className="relative border border-indigo-500/30 rounded-md shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] transition-all duration-300" 
                   style={{
-                    width: scanMode === 'barcode' ? '85%' : '65%',
-                    height: scanMode === 'barcode' ? '25%' : undefined,
-                    aspectRatio: scanMode === 'qr' ? '1/1' : undefined,
+                    width: '82%',
+                    height: '42%'
                   }}
                 >
                   {/* Corner Brackets */}
@@ -422,38 +386,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                   {/* Text */}
                   <div className="absolute -bottom-6 left-0 right-0 text-center">
                     <p className="text-[9px] text-white/70 font-medium tracking-wide">
-                      Align {scanMode === 'barcode' ? 'barcode' : 'QR code'} inside frame
+                      Align barcode or QR code inside frame
                     </p>
                   </div>
                 </div>
               </div>
             )}
-
-            {/* Mode Switcher */}
-            <div className="absolute bottom-2 left-2 flex gap-0.5 pointer-events-auto z-10 bg-black/60 p-0.5 rounded-lg ring-1 ring-white/15 backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => setScanMode('barcode')}
-                className={`px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wide transition-all ${
-                  scanMode === 'barcode'
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                1D Barcode
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanMode('qr')}
-                className={`px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wide transition-all ${
-                  scanMode === 'qr'
-                    ? 'bg-indigo-600 text-white shadow'
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                QR Code
-              </button>
-            </div>
 
             {/* Flashlight/Torch button */}
             {isTorchSupported && (
@@ -532,9 +470,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                   <div 
                     className="relative border border-indigo-500/30 rounded-lg shadow-[0_0_0_9999px_rgba(15,23,42,0.65)] transition-all duration-300" 
                     style={{
-                      width: scanMode === 'barcode' ? '85%' : '65%',
-                      height: scanMode === 'barcode' ? '25%' : undefined,
-                      aspectRatio: scanMode === 'qr' ? '1/1' : undefined,
+                      width: '82%',
+                      height: '42%'
                     }}
                   >
                     {/* Corner Brackets */}
@@ -549,38 +486,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                     {/* Guidance Text */}
                     <div className="absolute -bottom-8 left-0 right-0 text-center">
                       <p className="text-xs text-slate-300 font-medium tracking-wide">
-                        Point camera at {scanMode === 'barcode' ? 'barcode' : 'QR code'}
+                        Point camera at barcode, IMEI, or QR code
                       </p>
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Mode Switcher */}
-              <div className="absolute bottom-3 left-3 flex gap-1 pointer-events-auto z-10 bg-black/60 p-1 rounded-xl ring-1 ring-white/15 backdrop-blur-md">
-                <button
-                  type="button"
-                  onClick={() => setScanMode('barcode')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all ${
-                    scanMode === 'barcode'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  1D Barcode (IMEI)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScanMode('qr')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wide transition-all ${
-                    scanMode === 'qr'
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  QR Code
-                </button>
-              </div>
 
               {/* Flashlight/Torch button */}
               {isTorchSupported && (
