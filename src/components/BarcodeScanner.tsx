@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Barcode, Zap } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
@@ -36,6 +36,27 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     let isMounted = true;
     let qrScanner: Html5Qrcode | null = null;
 
+    // Explicit list of all supported formats we want to decode
+    const formatsToSupport = [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.AZTEC,
+      Html5QrcodeSupportedFormats.CODABAR,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.MAXICODE,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.PDF_417,
+      Html5QrcodeSupportedFormats.RSS_14,
+      Html5QrcodeSupportedFormats.RSS_EXPANDED,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION
+    ];
+
     const initAndStart = async () => {
       // 1. Check for Secure Context (HTTPS/localhost)
       if (!window.isSecureContext) {
@@ -63,12 +84,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         // Try initializing with BarcodeDetector API (fast native android decoding)
         try {
           qrScanner = new Html5Qrcode(scannerId, {
+            formatsToSupport,
             verbose: false,
             useBarCodeDetectorIfSupported: true
           });
         } catch (initErr) {
           console.warn("Failed to init Html5Qrcode with BarcodeDetector, trying without:", initErr);
           qrScanner = new Html5Qrcode(scannerId, {
+            formatsToSupport,
             verbose: false,
             useBarCodeDetectorIfSupported: false
           });
@@ -79,12 +102,17 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         const scanConfig = {
           fps: 15,
           qrbox: (width: number, height: number) => {
-            // Wide rectangular area for barcodes & QR codes
-            const qrWidth = Math.min(width * 0.85, inline ? 260 : 320);
-            const qrHeight = Math.min(height * 0.6, inline ? 100 : 160);
+            // Wide rectangular area matching the visual overlay percentages
+            const qrWidth = Math.round(width * 0.92);
+            const qrHeight = Math.round(height * 0.45);
             return { width: qrWidth, height: qrHeight };
           },
           aspectRatio: inline ? 1.777778 : 1.333333,
+          // Request high resolution to clearly decode tiny / high-density router barcodes
+          videoConstraints: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
         };
 
         const onScanSuccess = (decodedText: string) => {
@@ -285,10 +313,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                 <div 
                   className="relative border border-indigo-500/30 rounded-md shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]" 
                   style={{
-                    width: '85%',
-                    height: '60%',
-                    maxWidth: '260px',
-                    maxHeight: '100px',
+                    width: '92%',
+                    height: '45%',
                   }}
                 >
                   {/* Corner Brackets */}
@@ -385,10 +411,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                   <div 
                     className="relative border border-indigo-500/30 rounded-lg shadow-[0_0_0_9999px_rgba(15,23,42,0.65)]" 
                     style={{
-                      width: '80%',
-                      height: '50%',
-                      maxWidth: '320px',
-                      maxHeight: '160px',
+                      width: '92%',
+                      height: '45%',
                     }}
                   >
                     {/* Corner Brackets */}
