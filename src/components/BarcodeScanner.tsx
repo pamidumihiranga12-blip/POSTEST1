@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Barcode, Zap, RefreshCw } from 'lucide-react';
+import { X, Barcode, Zap } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface BarcodeScannerProps {
@@ -15,7 +15,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   
   // Unique ID for the scanner DOM element to avoid conflicts
   const [scannerId] = useState(() => `html5-qr-reader-${Math.random().toString(36).substring(2, 9)}`);
@@ -141,25 +140,67 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           // Ignore verbose scanner logs (fires for unsuccessful frames)
         };
 
-        // Try sequentially: chosen facingMode, then fallback opposite facingMode, then default
+        // Deep camera device selection sequence to guarantee back camera activation
         let started = false;
         try {
-          await qrScanner.start({ facingMode: facingMode }, scanConfig, onScanSuccess, onScanFailure);
-          started = true;
-        } catch (firstErr) {
-          console.warn(`Failed starting camera with facingMode ${facingMode}, trying fallback:`, firstErr);
-          if (isMounted) {
-            const fallbackMode = facingMode === 'environment' ? 'user' : 'environment';
-            try {
-              await qrScanner.start({ facingMode: fallbackMode }, scanConfig, onScanSuccess, onScanFailure);
-              started = true;
-            } catch (secErr) {
-              console.warn(`Failed starting fallback camera with facingMode ${fallbackMode}, trying default camera:`, secErr);
-              if (isMounted) {
-                await qrScanner.start({}, scanConfig, onScanSuccess, onScanFailure);
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0 && isMounted) {
+            // Find rear camera by label keywords
+            const rearCamera = cameras.find(camera => {
+              const label = camera.label.toLowerCase();
+              return label.includes('back') || 
+                     label.includes('rear') || 
+                     label.includes('environment') || 
+                     label.includes('main') ||
+                     label.includes('out') ||
+                     label.includes('triple') ||
+                     label.includes('dual') ||
+                     label.includes('camera 0');
+            });
+
+            // If we found a rear camera by label, start it specifically by deviceId
+            if (rearCamera) {
+              try {
+                await qrScanner.start(rearCamera.id, scanConfig, onScanSuccess, onScanFailure);
                 started = true;
+              } catch (err) {
+                console.warn("Failed starting rear camera by ID, trying facingMode:", err);
               }
             }
+
+            // Fallback: Try facingMode environment
+            if (!started && isMounted) {
+              try {
+                await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
+                started = true;
+              } catch (err) {
+                console.warn("Failed starting camera with facingMode 'environment', trying last camera in list:", err);
+              }
+            }
+
+            // Fallback: Try the last camera in the list (on mobile, the rear camera is usually listed last)
+            if (!started && isMounted) {
+              try {
+                const lastCamera = cameras[cameras.length - 1];
+                await qrScanner.start(lastCamera.id, scanConfig, onScanSuccess, onScanFailure);
+                started = true;
+              } catch (err) {
+                console.warn("Failed starting last camera in list:", err);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not enumerate cameras, falling back to standard facingMode constraints:", e);
+        }
+
+        // Ultimate fallback: Try facingMode environment directly
+        if (!started && isMounted) {
+          try {
+            await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
+            started = true;
+          } catch (err) {
+            console.error("All attempts to start camera failed:", err);
+            throw err;
           }
         }
 
@@ -218,7 +259,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         }
       }
     };
-  }, [inline, retryCount, scannerId, facingMode]);
+  }, [inline, retryCount, scannerId]);
 
   const handleRetry = () => {
     setError('');
@@ -226,23 +267,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     setIsTorchSupported(false);
     setIsTorchOn(false);
     setRetryCount(prev => prev + 1);
-  };
-
-  const toggleCamera = async () => {
-    setIsTorchOn(false);
-    setIsTorchSupported(false);
-    
-    // Stop the running camera first to release hardware lock before changing facingMode
-    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-      setScanning(false);
-      try {
-        await html5QrCodeRef.current.stop();
-      } catch (err) {
-        console.error("Error stopping camera for toggle:", err);
-      }
-    }
-    
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
   };
 
   const toggleTorch = async () => {
@@ -352,18 +376,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
               </div>
             )}
 
-            {/* Switch Camera button */}
-            {scanning && (
-              <button
-                type="button"
-                onClick={toggleCamera}
-                className="absolute bottom-2 left-2 p-1.5 rounded-full transition-all duration-300 shadow-md pointer-events-auto z-10 flex items-center justify-center bg-black/60 text-white/80 hover:bg-black/80 hover:text-white ring-1 ring-white/15 backdrop-blur-md"
-                title="Switch Camera (Front/Back)"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            )}
-
             {/* Flashlight/Torch button */}
             {isTorchSupported && (
               <button
@@ -462,18 +474,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Switch Camera button */}
-              {scanning && (
-                <button
-                  type="button"
-                  onClick={toggleCamera}
-                  className="absolute bottom-3 left-3 p-2.5 rounded-full transition-all duration-300 shadow-lg pointer-events-auto z-10 flex items-center justify-center bg-black/60 text-white/80 hover:bg-black/80 hover:text-white ring-1 ring-white/15 backdrop-blur-md"
-                  title="Switch Camera (Front/Back)"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
               )}
 
               {/* Flashlight/Torch button */}
