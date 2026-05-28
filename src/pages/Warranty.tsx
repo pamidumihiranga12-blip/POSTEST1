@@ -99,7 +99,6 @@ const Warranty: React.FC = () => {
 
   return (
     <div>
-      {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} />}
 
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -234,6 +233,11 @@ const Warranty: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Barcode *</label>
+                  {showScanner && (
+                    <div className="mb-2">
+                      <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <input {...register('barcode', { required: true })} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
                     <button type="button" onClick={() => setShowScanner(true)} className="px-3 py-2.5 border border-gray-200 rounded-xl hover:border-indigo-300 transition-colors">

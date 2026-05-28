@@ -479,7 +479,6 @@ const Billing: React.FC = () => {
 
   return (
     <div className="flex gap-5 h-[calc(100vh-8rem)]">
-      {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} />}
 
       {/* LEFT: Product Search Panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -501,6 +500,11 @@ const Billing: React.FC = () => {
               </div>
             </div>
           </div>
+          {showScanner && (
+            <div className="mb-3">
+              <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+            </div>
+          )}
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />

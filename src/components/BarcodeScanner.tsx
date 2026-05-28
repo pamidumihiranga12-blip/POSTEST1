@@ -5,9 +5,10 @@ import { BrowserMultiFormatReader } from '@zxing/library';
 interface BarcodeScannerProps {
   onScan: (barcode: string) => void;
   onClose: () => void;
+  inline?: boolean;
 }
 
-const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
+const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string>('');
   const [scanning, setScanning] = useState(false);
@@ -46,6 +47,44 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       onClose();
     }
   };
+
+  if (inline) {
+    return (
+      <div className="bg-slate-900 text-white rounded-xl p-3 border border-indigo-500/30 shadow-inner relative animate-in fade-in slide-in-from-top duration-300">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Barcode className="w-4 h-4 text-indigo-400 animate-pulse" />
+            <span className="text-xs font-semibold tracking-wide text-slate-200">Live Camera Scanner</span>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-3.5 h-3.5 text-gray-400 hover:text-white" />
+          </button>
+        </div>
+
+        {error ? (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-xs text-red-400">
+            {error}
+          </div>
+        ) : (
+          <div className="relative rounded-lg overflow-hidden bg-black aspect-video max-h-40 border border-white/5">
+            <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+            {scanning && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-24 h-24 border border-white/30 rounded relative">
+                  <div className="absolute top-0 left-0 w-3.5 h-3.5 border-t-2 border-l-2 border-indigo-400 rounded-tl-sm"></div>
+                  <div className="absolute top-0 right-0 w-3.5 h-3.5 border-t-2 border-r-2 border-indigo-400 rounded-tr-sm"></div>
+                  <div className="absolute bottom-0 left-0 w-3.5 h-3.5 border-b-2 border-l-2 border-indigo-400 rounded-bl-sm"></div>
+                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 border-b-2 border-r-2 border-indigo-400 rounded-br-sm"></div>
+                  <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-indigo-400/80 animate-pulse"></div>
+                </div>
+                <p className="absolute bottom-2 text-[9px] text-white/80 font-medium">Align barcode inside frame</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">

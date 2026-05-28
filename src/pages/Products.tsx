@@ -638,7 +638,9 @@ const Products: React.FC = () => {
 
   return (
     <div className="min-h-0">
-      {showScanner && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} />}
+      {showScanner && !['search', 'form', 'imei', 'adjustImei'].includes(scanTarget) && (
+        <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} />
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
@@ -716,14 +718,21 @@ const Products: React.FC = () => {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-5">
         <div className="flex flex-col lg:flex-row gap-3 p-4">
           {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
-              placeholder="Search by name, barcode, or category..."
-            />
+          <div className="flex-1">
+            {showScanner && scanTarget === 'search' && (
+              <div className="mb-3">
+                <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+              </div>
+            )}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
+                placeholder="Search by name, barcode, or category..."
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1119,6 +1128,11 @@ const Products: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Barcode <span className="text-red-400">*</span></label>
+                    {showScanner && scanTarget === 'form' && (
+                      <div className="mb-2">
+                        <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <input {...register('barcode', { required: 'Barcode is required' })} className={`flex-1 px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono ${errors.barcode ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="e.g. 8901234567890" />
                       <button type="button" onClick={() => { setScanTarget('form'); setShowScanner(true); }} className="px-3 py-2.5 border border-gray-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-all">
@@ -1184,6 +1198,11 @@ const Products: React.FC = () => {
                       <p className="text-xs text-blue-600 mb-3">Scan or type each router's IMEI. Stock = number of IMEIs added.</p>
 
                       {/* Input row */}
+                      {showScanner && scanTarget === 'imei' && (
+                        <div className="mb-3">
+                          <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+                        </div>
+                      )}
                       <div className="flex gap-2 mb-3">
                         <input
                           type="text"
@@ -1466,6 +1485,11 @@ const Products: React.FC = () => {
                     <p className="text-xs text-blue-600 mb-3">Existing: {showStockModal.imeiNumbers?.length || 0} IMEI(s). New total will be {(showStockModal.imeiNumbers?.length || 0) + adjustImeiList.length}.</p>
 
                     {/* Input row */}
+                    {showScanner && scanTarget === 'adjustImei' && (
+                      <div className="mb-3">
+                        <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setShowScanner(false)} inline />
+                      </div>
+                    )}
                     <div className="flex gap-2 mb-3">
                       <input
                         type="text"
