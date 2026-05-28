@@ -99,20 +99,58 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         
         html5QrCodeRef.current = qrScanner;
 
-        const scanConfig = {
-          fps: 15,
-          qrbox: (width: number, height: number) => {
-            // Wide rectangular area matching the visual overlay percentages
-            const qrWidth = Math.round(width * 0.92);
-            const qrHeight = Math.round(height * 0.45);
-            return { width: qrWidth, height: qrHeight };
-          },
-          aspectRatio: inline ? 1.777778 : 1.333333,
-          // Request high resolution to clearly decode tiny / high-density router barcodes
-          videoConstraints: {
+        // Try to enumerate cameras to find a physical rear camera ID
+        let rearCameraId: string | undefined = undefined;
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            const rearCamera = cameras.find(camera => {
+              const label = camera.label.toLowerCase();
+              return label.includes('back') || 
+                     label.includes('rear') || 
+                     label.includes('environment') || 
+                     label.includes('main') ||
+                     label.includes('out') ||
+                     label.includes('triple') ||
+                     label.includes('dual') ||
+                     label.includes('camera 0');
+            });
+            if (rearCamera) {
+              rearCameraId = rearCamera.id;
+            } else {
+              // Fallback to the last camera in the list (usually the rear camera on mobile)
+              rearCameraId = cameras[cameras.length - 1].id;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not list cameras:", e);
+        }
+
+        // Helper to construct scan config. Because html5-qrcode completely ignores the first argument
+        // of start() if videoConstraints is set in the scan config, we MUST merge deviceId/facingMode
+        // directly inside the videoConstraints object itself.
+        const buildScanConfig = (deviceId?: string, forceFacingMode?: boolean) => {
+          const videoConstraints: MediaTrackConstraints = {
             width: { ideal: 1920 },
             height: { ideal: 1080 }
+          };
+
+          if (deviceId && !forceFacingMode) {
+            videoConstraints.deviceId = { exact: deviceId };
+          } else {
+            videoConstraints.facingMode = { ideal: "environment" };
           }
+
+          return {
+            fps: 15,
+            qrbox: (width: number, height: number) => {
+              const qrWidth = Math.round(width * 0.92);
+              const qrHeight = Math.round(height * 0.45);
+              return { width: qrWidth, height: qrHeight };
+            },
+            aspectRatio: inline ? 1.777778 : 1.333333,
+            videoConstraints
+          };
         };
 
         const onScanSuccess = (decodedText: string) => {
@@ -137,66 +175,51 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
         };
 
         const onScanFailure = () => {
-          // Ignore verbose scanner logs (fires for unsuccessful frames)
+          // Ignore verbose scanner logs
         };
 
-        // Deep camera device selection sequence to guarantee back camera activation
+        // Try sequentially starting the camera using merged constraints:
         let started = false;
-        try {
-          const cameras = await Html5Qrcode.getCameras();
-          if (cameras && cameras.length > 0 && isMounted) {
-            // Find rear camera by label keywords
-            const rearCamera = cameras.find(camera => {
-              const label = camera.label.toLowerCase();
-              return label.includes('back') || 
-                     label.includes('rear') || 
-                     label.includes('environment') || 
-                     label.includes('main') ||
-                     label.includes('out') ||
-                     label.includes('triple') ||
-                     label.includes('dual') ||
-                     label.includes('camera 0');
-            });
 
-            // If we found a rear camera by label, start it specifically by deviceId
-            if (rearCamera) {
-              try {
-                await qrScanner.start(rearCamera.id, scanConfig, onScanSuccess, onScanFailure);
-                started = true;
-              } catch (err) {
-                console.warn("Failed starting rear camera by ID, trying facingMode:", err);
-              }
-            }
-
-            // Fallback: Try facingMode environment
-            if (!started && isMounted) {
-              try {
-                await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
-                started = true;
-              } catch (err) {
-                console.warn("Failed starting camera with facingMode 'environment', trying last camera in list:", err);
-              }
-            }
-
-            // Fallback: Try the last camera in the list (on mobile, the rear camera is usually listed last)
-            if (!started && isMounted) {
-              try {
-                const lastCamera = cameras[cameras.length - 1];
-                await qrScanner.start(lastCamera.id, scanConfig, onScanSuccess, onScanFailure);
-                started = true;
-              } catch (err) {
-                console.warn("Failed starting last camera in list:", err);
-              }
-            }
+        // Attempt 1: Start with specific rear camera ID constraints (most reliable)
+        if (rearCameraId && isMounted) {
+          try {
+            const config = buildScanConfig(rearCameraId, false);
+            await qrScanner.start(rearCameraId, config, onScanSuccess, onScanFailure);
+            started = true;
+          } catch (err) {
+            console.warn("Failed starting rear camera by ID constraints, trying facingMode:", err);
           }
-        } catch (e) {
-          console.warn("Could not enumerate cameras, falling back to standard facingMode constraints:", e);
         }
 
-        // Ultimate fallback: Try facingMode environment directly
+        // Attempt 2: Start with facingMode environment constraints (fallback)
         if (!started && isMounted) {
           try {
-            await qrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
+            const config = buildScanConfig(undefined, true);
+            await qrScanner.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure);
+            started = true;
+          } catch (err) {
+            console.warn("Failed starting camera with facingMode constraints, trying generic resolution:", err);
+          }
+        }
+
+        // Attempt 3: Let browser pick the default camera but request 1080p (ultimate fallback)
+        if (!started && isMounted) {
+          try {
+            const config = {
+              fps: 15,
+              qrbox: (width: number, height: number) => {
+                const qrWidth = Math.round(width * 0.92);
+                const qrHeight = Math.round(height * 0.45);
+                return { width: qrWidth, height: qrHeight };
+              },
+              aspectRatio: inline ? 1.777778 : 1.333333,
+              videoConstraints: {
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+              }
+            };
+            await qrScanner.start({}, config, onScanSuccess, onScanFailure);
             started = true;
           } catch (err) {
             console.error("All attempts to start camera failed:", err);
