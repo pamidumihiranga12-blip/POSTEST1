@@ -40,20 +40,22 @@ const Warranty: React.FC = () => {
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
+    const clean = barcode.replace(/[\r\n\t]/g, '').replace(/^[^0-9]*/,'').replace(/[^0-9]*$/,'').trim();
+    if (!clean) return;
     setShowScanner(false);
     try {
-      const product = await getProductByBarcode(barcode);
+      const product = await getProductByBarcode(clean);
       if (product) {
-        setValue('barcode', barcode);
+        setValue('barcode', clean);
         setValue('productName', product.name);
         setValue('productId', product.id);
         toast.success(`Product found: ${product.name}`);
       } else {
-        setValue('barcode', barcode);
+        setValue('barcode', clean);
         toast('Barcode set. Product not found in system.');
       }
     } catch (error) {
-      setValue('barcode', barcode);
+      setValue('barcode', clean);
     }
   };
 

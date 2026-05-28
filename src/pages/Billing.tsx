@@ -156,11 +156,14 @@ const Billing: React.FC = () => {
 
   /** Handle a scan result from the camera/hardware scanner */
   const handleBarcodeScanned = async (barcode: string) => {
+    const cleanBarcode = barcode.replace(/[\r\n\t]/g, '').replace(/^[^0-9]*/,'').replace(/[^0-9]*$/,'').trim();
+    if (!cleanBarcode) return;
+
     setShowScanner(false);
-    setSearchQuery(barcode);
+    setSearchQuery(cleanBarcode);
     try {
       // 1. Try product barcode first
-      const product = await getProductByBarcode(barcode);
+      const product = await getProductByBarcode(cleanBarcode);
       if (product) {
         if (product.stock <= 0) { toast.error(`${product.name} is out of stock!`); return; }
         if (product.imeiNumbers && product.imeiNumbers.length > 0) {
@@ -174,21 +177,21 @@ const Billing: React.FC = () => {
 
       // 2. Try matching the barcode as an IMEI across all loaded products
       const imeiProduct = products.find(p =>
-        p.imeiNumbers && p.imeiNumbers.includes(barcode)
+        p.imeiNumbers && p.imeiNumbers.includes(cleanBarcode)
       );
       if (imeiProduct) {
         if (imeiProduct.stock <= 0) { toast.error(`${imeiProduct.name} is out of stock!`); return; }
         const alreadyInCart = cartImeiNumbersForProduct(imeiProduct.id);
-        if (alreadyInCart.includes(barcode)) {
+        if (alreadyInCart.includes(cleanBarcode)) {
           toast.error('This IMEI is already in the cart');
           return;
         }
-        addToCart(imeiProduct, 1, barcode);
-        toast.success(`Added: ${imeiProduct.name} — ${barcode}`);
+        addToCart(imeiProduct, 1, cleanBarcode);
+        toast.success(`Added: ${imeiProduct.name} — ${cleanBarcode}`);
         return;
       }
 
-      toast.error('Product not found for barcode: ' + barcode);
+      toast.error('Product not found for barcode: ' + cleanBarcode);
     } catch { toast.error('Error scanning barcode'); }
   };
 

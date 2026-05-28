@@ -130,24 +130,22 @@ const Products: React.FC = () => {
 
 
   const handleBarcodeScanned = (barcode: string) => {
+    // Sanitize: strip carriage returns, tabs, and non-numeric leading/trailing chars
+    const clean = barcode.replace(/[\r\n\t]/g, '').replace(/^[^0-9]*/, '').replace(/[^0-9]*$/, '').trim();
+    if (!clean) return;
     setShowScanner(false);
     if (scanTarget === 'form') {
-      setValue('barcode', barcode);
+      setValue('barcode', clean);
     } else if (scanTarget === 'imei') {
-      // Add scanned value directly to IMEI list
-      const trimmed = barcode.trim();
-      if (!trimmed) return;
-      if (imeiList.includes(trimmed)) { toast.error('This IMEI is already in the list'); return; }
-      setImeiList(prev => [...prev, trimmed]);
-      toast.success(`IMEI added: ${trimmed}`);
+      if (imeiList.includes(clean)) { toast.error('This IMEI is already in the list'); return; }
+      setImeiList(prev => [...prev, clean]);
+      toast.success(`IMEI added: ${clean}`);
     } else if (scanTarget === 'adjustImei') {
-      const trimmed = barcode.trim();
-      if (!trimmed) return;
-      if (adjustImeiList.includes(trimmed)) { toast.error('This IMEI is already in the list'); return; }
-      setAdjustImeiList(prev => [...prev, trimmed]);
-      toast.success(`IMEI added: ${trimmed}`);
+      if (adjustImeiList.includes(clean)) { toast.error('This IMEI is already in the list'); return; }
+      setAdjustImeiList(prev => [...prev, clean]);
+      toast.success(`IMEI added: ${clean}`);
     } else {
-      setSearchQuery(barcode);
+      setSearchQuery(clean);
     }
   };
 
