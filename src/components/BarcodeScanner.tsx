@@ -84,21 +84,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
       setError('');
       setIsLoading(true);
 
-      const formats = [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODABAR,
-        Html5QrcodeSupportedFormats.DATA_MATRIX,
-        Html5QrcodeSupportedFormats.PDF_417
-      ];
-
       // Set aspect ratio matching the typical camera (16:9) to keep coordinates completely aligned
       await html5QrCodeRef.current.start(
         cameraId,
@@ -191,8 +176,26 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   useEffect(() => {
     hasFiredRef.current = false;
     
-    // Initialize programmatic UI-less scanner instance
-    const scanner = new Html5Qrcode(scannerId);
+    const formatsToSupport = [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.CODE_93,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.CODABAR,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+      Html5QrcodeSupportedFormats.PDF_417
+    ];
+
+    // Initialize programmatic UI-less scanner instance with all necessary barcode decoders enabled
+    const scanner = new Html5Qrcode(scannerId, {
+      formatsToSupport,
+      useBarCodeDetectorIfSupported: false // Pure JS decoder to prevent native detector crash bugs
+    });
     html5QrCodeRef.current = scanner;
 
     // Request permissions and list cameras
