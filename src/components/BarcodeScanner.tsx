@@ -66,7 +66,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
       html5QrCodeRef.current
         .stop()
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           onScanRef.current(cleanCode);
           onCloseRef.current();
@@ -83,6 +83,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     try {
       setError('');
       setIsLoading(true);
+
+      const formats = [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.PDF_417
+      ];
 
       // Set aspect ratio matching the typical camera (16:9) to keep coordinates completely aligned
       await html5QrCodeRef.current.start(
@@ -147,7 +162,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
           const cleanCode = sanitizeBarcode(decodedText);
           handleScanSuccess(cleanCode);
         },
-        () => {}
+        () => { }
       );
 
       setIsScanning(true);
@@ -175,27 +190,9 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
 
   useEffect(() => {
     hasFiredRef.current = false;
-    
-    const formatsToSupport = [
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.CODABAR,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-      Html5QrcodeSupportedFormats.PDF_417
-    ];
 
-    // Initialize programmatic UI-less scanner instance with all necessary barcode decoders enabled
-    const scanner = new Html5Qrcode(scannerId, {
-      formatsToSupport,
-      useBarCodeDetectorIfSupported: false // Pure JS decoder to prevent native detector crash bugs
-    });
+    // Initialize programmatic UI-less scanner instance
+    const scanner = new Html5Qrcode(scannerId);
     html5QrCodeRef.current = scanner;
 
     // Request permissions and list cameras
@@ -242,7 +239,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
     if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
       html5QrCodeRef.current
         .stop()
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           onScanRef.current(cleanCode);
           onCloseRef.current();
@@ -316,7 +313,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   if (inline) {
     return (
       <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-3 shadow-inner relative animate-in fade-in slide-in-from-top duration-300 overflow-hidden w-full max-w-sm">
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @keyframes scan-laser-pulse {
             0% { top: 5%; opacity: 0.8; }
             50% { top: 95%; opacity: 1; }
@@ -387,11 +385,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                 <button
                   type="button"
                   onClick={toggleTorch}
-                  className={`p-1 rounded-md border backdrop-blur-md transition-all ${
-                    torchOn
+                  className={`p-1 rounded-md border backdrop-blur-md transition-all ${torchOn
                       ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
                       : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <Zap className="w-3 h-3" />
                 </button>
@@ -408,7 +405,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
   ───────────────────────────────────────────────────────────── */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200 p-4">
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes scan-laser-pulse {
           0% { top: 5%; opacity: 0.8; }
           50% { top: 95%; opacity: 1; }
@@ -487,11 +485,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose, inline
                   <button
                     type="button"
                     onClick={toggleTorch}
-                    className={`p-2 rounded-lg border backdrop-blur-md transition-all shadow-md ${
-                      torchOn
+                    className={`p-2 rounded-lg border backdrop-blur-md transition-all shadow-md ${torchOn
                         ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
                         : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:text-white'
-                    }`}
+                      }`}
                   >
                     <Zap className="w-4 h-4" />
                   </button>
