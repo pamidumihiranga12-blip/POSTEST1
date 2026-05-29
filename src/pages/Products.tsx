@@ -131,7 +131,12 @@ const Products: React.FC = () => {
 
   const handleBarcodeScanned = (barcode: string) => {
     // Sanitize: strip carriage returns, tabs, and non-numeric leading/trailing chars
-    const clean = barcode.replace(/[\r\n\t]/g, '').replace(/^[^0-9]*/, '').replace(/[^0-9]*$/, '').trim();
+    const clean = barcode
+      .replace(/[\r\n\t]/g, '')                          // Remove carriage returns, newlines, and tabs
+      .replace(/^(imei|sn|s\/n|barcode|qr)[:\-\s]+/i, '') // Remove common labels/prefixes
+      .replace(/^[^a-zA-Z0-9]+/, '')                     // Remove leading punctuation/symbols
+      .replace(/[^a-zA-Z0-9]+$/, '')                     // Remove trailing punctuation/symbols
+      .trim();
     if (!clean) return;
     setShowScanner(false);
     if (scanTarget === 'form') {

@@ -11,12 +11,14 @@ interface BarcodeScannerProps {
 // Global counter for DOM element IDs to prevent duplicate ID collision
 let instanceCounter = 0;
 
-// Sanitizes the raw barcode string by removing prefixes (e.g. "IMEI:") and whitespace
+// Sanitizes the raw barcode string by removing prefixes (e.g. "IMEI:") and whitespace while preserving alphanumeric English letters and serial numbers
 const sanitizeBarcode = (raw: string): string => {
+  if (!raw) return '';
   return raw
-    .replace(/[\r\n\t]/g, '')        // Remove carriage returns, newlines, and tabs
-    .replace(/^[^0-9]*/, '')        // Remove any leading non-numeric characters (like "IMEI:")
-    .replace(/[^0-9]*$/, '')        // Remove any trailing non-numeric characters
+    .replace(/[\r\n\t]/g, '')                          // Remove carriage returns, newlines, and tabs
+    .replace(/^(imei|sn|s\/n|barcode|qr)[:\-\s]+/i, '') // Remove common labels/prefixes (case-insensitive)
+    .replace(/^[^a-zA-Z0-9]+/, '')                     // Remove any leading symbols/punctuation except letters and digits
+    .replace(/[^a-zA-Z0-9]+$/, '')                     // Remove any trailing symbols/punctuation except letters and digits
     .trim();
 };
 
