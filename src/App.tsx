@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase/config';
@@ -104,7 +104,7 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -150,7 +150,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
