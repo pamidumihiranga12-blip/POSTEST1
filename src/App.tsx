@@ -93,9 +93,19 @@ function App() {
             await createUserProfile(firebaseUser.uid, newProfile);
             profile = newProfile;
           }
-          if (profile.email === ADMIN_EMAIL && !profile.isActive) {
-            profile.isActive = true;
-            await updateUserProfile(firebaseUser.uid, { isActive: true });
+          if (profile.email === ADMIN_EMAIL) {
+            let updates: any = {};
+            if (!profile.isActive) {
+              profile.isActive = true;
+              updates.isActive = true;
+            }
+            if (profile.role !== 'admin') {
+              profile.role = 'admin';
+              updates.role = 'admin';
+            }
+            if (Object.keys(updates).length > 0) {
+              await updateUserProfile(firebaseUser.uid, updates);
+            }
           }
           setUserProfile(profile);
         } catch (error) {

@@ -67,9 +67,19 @@ const Login: React.FC = () => {
         profile = newProfile;
       }
 
-      if (profile.email === ADMIN_EMAIL && !profile.isActive) {
-        profile.isActive = true;
-        await updateUserProfile(user.uid, { isActive: true });
+      if (profile.email === ADMIN_EMAIL) {
+        let updates: any = {};
+        if (!profile.isActive) {
+          profile.isActive = true;
+          updates.isActive = true;
+        }
+        if (profile.role !== 'admin') {
+          profile.role = 'admin';
+          updates.role = 'admin';
+        }
+        if (Object.keys(updates).length > 0) {
+          await updateUserProfile(user.uid, updates);
+        }
       }
 
       if (!profile.isActive) {
