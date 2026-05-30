@@ -111,7 +111,7 @@ const Register: React.FC = () => {
                   <input
                     {...register('displayName', { required: 'Name is required', minLength: { value: 2, message: 'Min 2 characters' } })}
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50"
-                    placeholder="John Smith"
+                    placeholder="pamidu mihiranga"
                   />
                 </div>
                 {errors.displayName && <p className="text-red-500 text-xs mt-1">{errors.displayName.message}</p>}
@@ -138,7 +138,7 @@ const Register: React.FC = () => {
                   <input
                     {...register('phone', { required: 'Phone is required' })}
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50"
-                    placeholder="+94 77 123 4567"
+                    placeholder="+94 78 680 0086"
                   />
                 </div>
                 {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone.message}</p>}
