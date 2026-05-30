@@ -30,6 +30,11 @@ const cashierNavItems = [
   { path: '/warranty', label: 'Warranty Claims', icon: Shield },
 ];
 
+// Normal User nav items (Own products only)
+const userNavItems = [
+  { path: '/products', label: 'Products', icon: Package },
+];
+
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -67,12 +72,14 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Build nav items based on role
   const allNavItems = role === 'cashier'
     ? cashierNavItems
-    : isAdmin()
-      ? [...navItems,
-          { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
-          { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
-        ]
-      : navItems; // staff and regular users get the standard nav (no admin panel)
+    : role === 'user'
+      ? userNavItems
+      : isAdmin()
+        ? [...navItems,
+            { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
+            { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
+          ]
+        : navItems; // staff gets standard nav (no admin panel/receipt settings)
 
   const NavItem = ({ path, label, icon: Icon }: { path: string; label: string; icon: any }) => (
     <NavLink

@@ -28,6 +28,7 @@ import BarcodePrint from './pages/BarcodePrint';
 import InvoiceSettings from './pages/InvoiceSettings';
 
 const CASHIER_PATHS = ['/billing', '/vouchers', '/warranty', '/profile'];
+const USER_PATHS = ['/products', '/profile'];
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userProfile, isLoading } = useAuthStore();
@@ -48,6 +49,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     const allowed = CASHIER_PATHS.some(p => currentPath.startsWith(p));
     if (!allowed) return <Navigate to="/billing" replace />;
   }
+  // Normal User can only access specific pages
+  if (userProfile?.role === 'user') {
+    const currentPath = window.location.hash.replace('#', '') || '/';
+    const allowed = USER_PATHS.some(p => currentPath.startsWith(p));
+    if (!allowed) return <Navigate to="/products" replace />;
+  }
   return <Layout>{children}</Layout>;
 };
 
@@ -60,9 +67,13 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoading } = useAuthStore();
+  const { user, userProfile, isLoading } = useAuthStore();
   if (isLoading) return null;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) {
+    if (userProfile?.role === 'cashier') return <Navigate to="/billing" replace />;
+    if (userProfile?.role === 'user') return <Navigate to="/products" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
   return <>{children}</>;
 };
 
