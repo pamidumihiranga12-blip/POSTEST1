@@ -15,7 +15,7 @@ const AdminPanel: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ displayName: '', phone: '', isActive: true, role: 'user' });
+  const [editForm, setEditForm] = useState({ displayName: '', phone: '', isActive: true, role: 'user' as string });
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState<any>(null);
@@ -197,8 +197,16 @@ const AdminPanel: React.FC = () => {
                     ) : '—'}
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${usr.role === 'admin' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}>
-                      {usr.role === 'admin' ? '⚡ Admin' : 'Staff'}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      usr.role === 'admin' ? 'bg-indigo-100 text-indigo-600' :
+                      usr.role === 'staff' ? 'bg-blue-100 text-blue-600' :
+                      usr.role === 'cashier' ? 'bg-amber-100 text-amber-600' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {usr.role === 'admin' ? '⚡ Admin' :
+                       usr.role === 'staff' ? '🧑‍💼 Staff' :
+                       usr.role === 'cashier' ? '🧾 Cashier' :
+                       '👤 User'}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -305,8 +313,10 @@ const AdminPanel: React.FC = () => {
                       onChange={e => setEditForm({ ...editForm, role: e.target.value })}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                     >
-                      <option value="user">Staff</option>
-                      <option value="admin">Admin</option>
+                      <option value="admin">⚡ Admin (Full Access)</option>
+                      <option value="staff">🧑‍💼 Staff (Standard Access)</option>
+                      <option value="cashier">🧾 Cashier (Billing, Vouchers, Warranty)</option>
+                      <option value="user">👤 Normal User (Own Products Only)</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-3">

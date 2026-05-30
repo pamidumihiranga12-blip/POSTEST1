@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import { Product, Customer, Invoice, Voucher, WarrantyClaim, Supplier, SupplierPayment } from '../store/posStore';
+import { useAuthStore } from '../store/authStore';
 
 // Collections
 export const COLLECTIONS = {
@@ -36,22 +37,35 @@ export const generateClaimNumber = () => {
 };
 
 // Products
+// Products
 export const getProducts = async () => {
   const q = query(collection(db, COLLECTIONS.PRODUCTS), orderBy('name'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (userProfile?.role === 'user' && !isAdmin()) {
+    return products.filter(p => p.addedBy === userProfile.uid);
+  }
+  return products;
 };
 
 export const getProductByBarcode = async (barcode: string) => {
   const q = query(collection(db, COLLECTIONS.PRODUCTS), where('barcode', '==', barcode));
   const snapshot = await getDocs(q);
   if (snapshot.empty) return null;
-  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Product;
+  const product = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Product;
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (userProfile?.role === 'user' && !isAdmin()) {
+    if (product.addedBy !== userProfile.uid) return null;
+  }
+  return product;
 };
 
 export const addProduct = async (product: Omit<Product, 'id'>) => {
+  const { userProfile } = useAuthStore.getState();
   const docRef = await addDoc(collection(db, COLLECTIONS.PRODUCTS), {
     ...product,
+    addedBy: userProfile?.uid || '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -73,7 +87,12 @@ export const getProductById = async (id: string) => {
   const docRef = doc(db, COLLECTIONS.PRODUCTS, id);
   const snapshot = await getDoc(docRef);
   if (!snapshot.exists()) return null;
-  return { id: snapshot.id, ...snapshot.data() } as Product;
+  const product = { id: snapshot.id, ...snapshot.data() } as Product;
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (userProfile?.role === 'user' && !isAdmin()) {
+    if (product.addedBy !== userProfile.uid) return null;
+  }
+  return product;
 };
 
 export const updateProductStock = async (id: string, newStock: number) => {
@@ -85,7 +104,7 @@ export const updateProductStock = async (id: string, newStock: number) => {
 
 export const getProductStats = async () => {
   const snapshot = await getDocs(collection(db, COLLECTIONS.PRODUCTS));
-  const products = snapshot.docs.map(d => {
+  let products = snapshot.docs.map(d => {
     const data = d.data();
     return {
       id: d.id,
@@ -96,8 +115,14 @@ export const getProductStats = async () => {
       stock: Number(data.stock) || 0,
       minStock: Number(data.minStock) || 0,
       category: data.category || 'Other',
+      addedBy: data.addedBy || '',
     } as Product;
   });
+
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (userProfile?.role === 'user' && !isAdmin()) {
+    products = products.filter(p => p.addedBy === userProfile.uid);
+  }
 
   const totalProducts = products.length;
   const lowStockCount = products.filter(p => (p.stock || 0) <= (p.minStock || 0) && (p.stock || 0) > 0).length;
@@ -295,12 +320,27 @@ export const updateWarrantyClaim = async (id: string, data: Partial<WarrantyClai
 
 // Users
 export const getUsers = async () => {
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin()) {
+    if (userProfile) {
+      const docRef = doc(db, COLLECTIONS.USERS, userProfile.uid);
+      const snapshot = await getDoc(docRef);
+      if (snapshot.exists()) {
+        return [{ id: snapshot.id, ...snapshot.data() }];
+      }
+    }
+    return [];
+  }
   const q = query(collection(db, COLLECTIONS.USERS), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
 export const getUserProfile = async (uid: string) => {
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (userProfile && userProfile.uid !== uid && !isAdmin()) {
+    return null;
+  }
   const docRef = doc(db, COLLECTIONS.USERS, uid);
   const snapshot = await getDoc(docRef);
   if (!snapshot.exists()) return null;
@@ -387,6 +427,7 @@ export const DEFAULT_INVOICE_SETTINGS = {
   logoUrl: '',
   fontFamilySelection: 'English (Courier)',
   fontSizeSelection: 'medium',
+  receiptSize: '80mm',
 };
 
 export const getInvoiceSettings = async () => {

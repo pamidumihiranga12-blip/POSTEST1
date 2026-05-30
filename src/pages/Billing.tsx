@@ -346,6 +346,10 @@ const Billing: React.FC = () => {
 
     const fontFamily = fontMapping[s.fontFamilySelection || 'English (Courier)'] || "'Courier New', Courier, monospace";
     const fontSizeStyle = getFontSizeStyles(s.fontSizeSelection);
+    const receiptSize = s.receiptSize || '80mm';
+    const pageWidth = receiptSize === '58mm' ? '58mm' : '80mm';
+    const bodyWidth = receiptSize === '58mm' ? '50mm' : '72mm';
+    const logoWidth = receiptSize === '58mm' ? '20mm' : '30mm';
 
     const itemsHtml = invoice.items.map((item: any) => `
       <tr>
@@ -364,10 +368,10 @@ const Billing: React.FC = () => {
   <meta charset="UTF-8">
   <title>Receipt - ${invoice.invoiceNumber}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
+    @page { size: ${pageWidth} auto; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 72mm;
+      width: ${bodyWidth};
       margin: 0 auto;
       padding: 4mm 2mm;
       font-family: ${fontFamily};
@@ -377,7 +381,7 @@ const Billing: React.FC = () => {
     }
     .center { text-align: center; }
     .logo-area { text-align: center; padding: 4mm 0 2mm; }
-    .logo-img { width: 30mm; height: auto; margin-bottom: 2mm; }
+    .logo-img { width: ${logoWidth}; height: auto; margin-bottom: 2mm; }
     .business-name {
       font-size: ${fontSizeStyle.title};
       font-weight: 900;
@@ -420,7 +424,7 @@ const Billing: React.FC = () => {
     .inv-number { font-size: 10px; font-weight: 700; color: #111; }
     .cashier-badge { background: #f0f0f0; border-radius: 4px; padding: 1px 4px; font-size: 9px; }
     @media print {
-      body { width: 72mm; margin: 0 auto; padding: 2mm 1mm; }
+      body { width: ${bodyWidth}; margin: 0 auto; padding: 2mm 1mm; }
       button { display: none !important; }
     }
   </style>

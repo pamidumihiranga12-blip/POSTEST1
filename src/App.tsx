@@ -27,8 +27,10 @@ import Suppliers from './pages/Suppliers';
 import BarcodePrint from './pages/BarcodePrint';
 import InvoiceSettings from './pages/InvoiceSettings';
 
+const CASHIER_PATHS = ['/billing', '/vouchers', '/warranty', '/profile'];
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoading } = useAuthStore();
+  const { user, userProfile, isLoading } = useAuthStore();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -40,6 +42,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  // Cashier can only access specific pages
+  if (userProfile?.role === 'cashier') {
+    const currentPath = window.location.hash.replace('#', '') || '/';
+    const allowed = CASHIER_PATHS.some(p => currentPath.startsWith(p));
+    if (!allowed) return <Navigate to="/billing" replace />;
+  }
   return <Layout>{children}</Layout>;
 };
 

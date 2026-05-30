@@ -8,7 +8,7 @@ interface UserProfile {
   email: string;
   displayName: string;
   phone?: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'staff' | 'cashier' | 'user';
   avatar?: string;
   createdAt: string;
   isActive: boolean;

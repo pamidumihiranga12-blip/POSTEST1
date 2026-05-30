@@ -23,6 +23,13 @@ const navItems = [
   { path: '/reports', label: 'Reports', icon: BarChart3 },
 ];
 
+// Cashier-only nav items
+const cashierNavItems = [
+  { path: '/billing', label: 'Billing', icon: ShoppingCart },
+  { path: '/vouchers', label: 'Vouchers', icon: Ticket },
+  { path: '/warranty', label: 'Warranty Claims', icon: Shield },
+];
+
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -55,12 +62,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   };
 
-  const allNavItems = isAdmin()
-    ? [...navItems,
-        { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
-        { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
-      ]
-    : navItems;
+  const role = userProfile?.role;
+
+  // Build nav items based on role
+  const allNavItems = role === 'cashier'
+    ? cashierNavItems
+    : isAdmin()
+      ? [...navItems,
+          { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
+          { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
+        ]
+      : navItems; // staff and regular users get the standard nav (no admin panel)
 
   const NavItem = ({ path, label, icon: Icon }: { path: string; label: string; icon: any }) => (
     <NavLink
@@ -113,7 +125,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {sidebarOpen && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-800 truncate">{userProfile?.displayName || 'User'}</p>
-              <p className="text-xs text-gray-400 truncate">{userProfile?.role === 'admin' ? 'Administrator' : 'Staff'}</p>
+              <p className="text-xs text-gray-400 truncate">
+                {role === 'admin' ? 'Administrator' :
+                 role === 'staff' ? 'Staff' :
+                 role === 'cashier' ? 'Cashier' :
+                 'User'}
+              </p>
             </div>
           )}
         </div>

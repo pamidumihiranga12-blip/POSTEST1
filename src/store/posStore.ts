@@ -17,6 +17,7 @@ export interface Product {
   supplierId?: string;
   supplierName?: string;
   imeiNumbers?: string[];
+  addedBy?: string;
   createdAt: string;
   updatedAt: string;
 }

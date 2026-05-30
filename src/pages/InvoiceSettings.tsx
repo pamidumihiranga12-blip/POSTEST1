@@ -13,6 +13,11 @@ import { format } from 'date-fns';
 
 type Settings = typeof DEFAULT_INVOICE_SETTINGS;
 
+const RECEIPT_SIZES = [
+  { label: '80mm (Standard Thermal)', value: '80mm' },
+  { label: '58mm (Narrow Thermal)', value: '58mm' },
+];
+
 const COLORS = [
   { label: 'Black (Thermal Recommended)', value: '#111111' },
   { label: 'Indigo', value: '#4f46e5' },
@@ -101,9 +106,9 @@ const InvoiceSettings: React.FC = () => {
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: 80mm auto; margin: 0; }
+  @page { size: ${settings.receiptSize || '80mm'} auto; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:${FONT_MAPPING[settings.fontFamilySelection || 'English (Courier)']}; font-size:${getFontSizeStyles(settings.fontSizeSelection).body}; color:#111; }
+  body { width:${settings.receiptSize === '58mm' ? '50mm' : '72mm'}; margin:0 auto; padding:4mm 2mm; font-family:${FONT_MAPPING[settings.fontFamilySelection || 'English (Courier)']}; font-size:${getFontSizeStyles(settings.fontSizeSelection).body}; color:#111; }
   .center { text-align:center; }
   .name { font-size:${getFontSizeStyles(settings.fontSizeSelection).title}; font-weight:900; color:#111; text-transform:uppercase; letter-spacing:1px; }
   .tagline { font-size:9px; color:#555; margin-top:1mm; }
@@ -127,7 +132,7 @@ const InvoiceSettings: React.FC = () => {
 </head>
 <body>
   <div class="center" style="padding:4mm 0 2mm;">
-    ${settings.logoUrl ? `<img src="${settings.logoUrl}" style="width:28mm;height:auto;margin-bottom:2mm;" onerror="this.style.display='none'">` : ''}
+    ${settings.logoUrl ? `<img src="${settings.logoUrl}" style="width:${settings.receiptSize === '58mm' ? '20mm' : '28mm'};height:auto;margin-bottom:2mm;" onerror="this.style.display='none'">` : ''}
     <div class="name">${settings.businessName}</div>
     ${settings.tagline ? `<div class="tagline">${settings.tagline}</div>` : ''}
     <div class="contact">
@@ -184,7 +189,7 @@ const InvoiceSettings: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Invoice Settings</h1>
-            <p className="text-gray-500 text-sm">Customize your 80mm thermal receipt</p>
+            <p className="text-gray-500 text-sm">Customize your {settings.receiptSize || '80mm'} thermal receipt</p>
           </div>
         </div>
         <div className="flex gap-3">
@@ -278,6 +283,40 @@ const InvoiceSettings: React.FC = () => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Paper Size */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Printer className="w-5 h-5 text-indigo-500" />
+              <h2 className="font-semibold text-gray-800">Paper Size</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {RECEIPT_SIZES.map(sz => (
+                <button
+                  key={sz.value}
+                  onClick={() => set('receiptSize' as any, sz.value)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                    (settings as any).receiptSize === sz.value
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <div className={`flex flex-col items-center justify-center rounded border-2 ${
+                    (settings as any).receiptSize === sz.value ? 'border-indigo-400' : 'border-gray-300'
+                  } bg-white shadow-sm`}
+                    style={{ width: sz.value === '58mm' ? '36px' : '50px', height: '64px' }}
+                  >
+                    <span className="text-xs font-bold text-gray-700">{sz.value}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-center leading-tight">{sz.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3 flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              Changing paper size affects all printed receipts in the system.
+            </p>
           </div>
 
           {/* Logo & Appearance */}
@@ -421,18 +460,18 @@ const InvoiceSettings: React.FC = () => {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-gray-100 flex items-center gap-2">
                 <Printer className="w-4 h-4 text-indigo-500" />
-                <span className="font-semibold text-gray-800 text-sm">80mm Receipt Preview</span>
+                <span className="font-semibold text-gray-800 text-sm">{(settings as any).receiptSize || '80mm'} Receipt Preview</span>
               </div>
               <div className="p-4 bg-gray-50">
                 <div className="mx-auto bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden"
-                  style={{ width: '284px', fontFamily: 'monospace' }}>
+                  style={{ width: (settings as any).receiptSize === '58mm' ? '210px' : '284px', fontFamily: 'monospace' }}>
                   <iframe
                     srcDoc={previewHtml}
                     style={{ width: '100%', height: '520px', border: 'none' }}
                     title="Receipt Preview"
                   />
                 </div>
-                <p className="text-center text-xs text-gray-400 mt-2">📄 Preview at 80mm scale</p>
+                <p className="text-center text-xs text-gray-400 mt-2">📄 Preview at {(settings as any).receiptSize || '80mm'} scale</p>
               </div>
             </div>
           </div>

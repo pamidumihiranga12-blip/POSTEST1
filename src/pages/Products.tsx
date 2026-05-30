@@ -386,6 +386,10 @@ const Products: React.FC = () => {
 
     const fontFamily = fontMapping[settings.fontFamilySelection || 'English (Courier)'] || "'Courier New', Courier, monospace";
     const fontSizeStyle = getFontSizeStyles(settings.fontSizeSelection);
+    const receiptSize = settings.receiptSize || '80mm';
+    const pageWidth = receiptSize === '58mm' ? '58mm' : '80mm';
+    const bodyWidth = receiptSize === '58mm' ? '50mm' : '72mm';
+    const logoWidth = receiptSize === '58mm' ? '20mm' : '28mm';
 
     const now = new Date();
     const dateStr = format(now, 'dd/MM/yyyy hh:mm a');
@@ -396,9 +400,9 @@ const Products: React.FC = () => {
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: 80mm auto; margin: 0; }
+  @page { size: ${pageWidth} auto; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:72mm; margin:0 auto; padding:4mm 2mm; font-family:${fontFamily}; font-size:${fontSizeStyle.body}; color:#111; }
+  body { width:${bodyWidth}; margin:0 auto; padding:4mm 2mm; font-family:${fontFamily}; font-size:${fontSizeStyle.body}; color:#111; }
   .center { text-align:center; }
   .name { font-size:${fontSizeStyle.title}; font-weight:900; color:#111; text-transform:uppercase; letter-spacing:1px; }
   .tagline { font-size:10px; color:#111; margin-top:2mm; font-weight:700; letter-spacing:0.5px; }

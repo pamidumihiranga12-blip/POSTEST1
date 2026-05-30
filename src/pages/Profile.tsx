@@ -82,8 +82,16 @@ const Profile: React.FC = () => {
               {initials}
             </div>
             <div className="flex items-center gap-2 pb-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${userProfile?.role === 'admin' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}>
-                {userProfile?.role === 'admin' ? '⚡ Administrator' : '👤 Staff'}
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                userProfile?.role === 'admin' ? 'bg-indigo-100 text-indigo-600' :
+                userProfile?.role === 'staff' ? 'bg-blue-100 text-blue-600' :
+                userProfile?.role === 'cashier' ? 'bg-amber-100 text-amber-600' :
+                'bg-gray-100 text-gray-600'
+              }`}>
+                {userProfile?.role === 'admin' ? '⚡ Administrator' :
+                 userProfile?.role === 'staff' ? '🧑‍💼 Staff' :
+                 userProfile?.role === 'cashier' ? '🧾 Cashier' :
+                 '👤 User'}
               </span>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${userProfile?.isActive ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
                 {userProfile?.isActive ? 'Active' : 'Inactive'}
@@ -112,7 +120,10 @@ const Profile: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <ShieldCheck className="w-4 h-4 text-gray-400" />
-                  {userProfile?.role === 'admin' ? 'Full Access' : 'Standard Access'}
+                  {userProfile?.role === 'admin' ? 'Full Access' :
+                   userProfile?.role === 'staff' ? 'Standard Access' :
+                   userProfile?.role === 'cashier' ? 'Cashier Access' :
+                   'Basic Access'}
                 </div>
               </div>
               <button
