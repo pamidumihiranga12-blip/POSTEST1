@@ -70,16 +70,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const role = userProfile?.role;
 
   // Build nav items based on role
-  const allNavItems = role === 'cashier'
-    ? cashierNavItems
-    : role === 'user'
-      ? userNavItems
-      : isAdmin()
-        ? [...navItems,
-            { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
-            { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
-          ]
-        : navItems; // staff gets standard nav (no admin panel/receipt settings)
+  const allNavItems = isAdmin()
+    ? [...navItems,
+        { path: '/admin', label: 'Admin Panel', icon: ShieldCheck },
+        { path: '/invoice-settings', label: 'Receipt Settings', icon: Settings },
+      ]
+    : navItems; // all non-admin roles (cashier, user, staff) get the standard pages
 
   const NavItem = ({ path, label, icon: Icon }: { path: string; label: string; icon: any }) => (
     <NavLink

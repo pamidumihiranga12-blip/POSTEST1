@@ -43,7 +43,7 @@ export const getProducts = async () => {
   const snapshot = await getDocs(q);
   const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
   const { userProfile, isAdmin } = useAuthStore.getState();
-  if (userProfile?.role === 'user' && !isAdmin()) {
+  if (!isAdmin() && userProfile) {
     return products.filter(p => p.addedBy === userProfile.uid);
   }
   return products;
@@ -55,7 +55,7 @@ export const getProductByBarcode = async (barcode: string) => {
   if (snapshot.empty) return null;
   const product = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Product;
   const { userProfile, isAdmin } = useAuthStore.getState();
-  if (userProfile?.role === 'user' && !isAdmin()) {
+  if (!isAdmin() && userProfile) {
     if (product.addedBy !== userProfile.uid) return null;
   }
   return product;
@@ -89,7 +89,7 @@ export const getProductById = async (id: string) => {
   if (!snapshot.exists()) return null;
   const product = { id: snapshot.id, ...snapshot.data() } as Product;
   const { userProfile, isAdmin } = useAuthStore.getState();
-  if (userProfile?.role === 'user' && !isAdmin()) {
+  if (!isAdmin() && userProfile) {
     if (product.addedBy !== userProfile.uid) return null;
   }
   return product;
@@ -120,7 +120,7 @@ export const getProductStats = async () => {
   });
 
   const { userProfile, isAdmin } = useAuthStore.getState();
-  if (userProfile?.role === 'user' && !isAdmin()) {
+  if (!isAdmin() && userProfile) {
     products = products.filter(p => p.addedBy === userProfile.uid);
   }
 
@@ -145,12 +145,19 @@ export const getProductStats = async () => {
 export const getCustomers = async () => {
   const q = query(collection(db, COLLECTIONS.CUSTOMERS), orderBy('name'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+  const customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return customers.filter(c => c.addedBy === userProfile.uid);
+  }
+  return customers;
 };
 
 export const addCustomer = async (customer: Omit<Customer, 'id'>) => {
+  const { userProfile } = useAuthStore.getState();
   const docRef = await addDoc(collection(db, COLLECTIONS.CUSTOMERS), {
     ...customer,
+    addedBy: userProfile?.uid || '',
     createdAt: new Date().toISOString(),
     totalPurchases: 0,
     loyaltyPoints: 0,
@@ -181,9 +188,11 @@ const stripUndefined = (obj: any): any => {
 
 // Invoices
 export const createInvoice = async (invoice: any) => {
+  const { userProfile } = useAuthStore.getState();
   // Clean invoice — remove any undefined fields before saving to Firestore
   const cleanInvoice = stripUndefined({
     ...invoice,
+    addedBy: userProfile?.uid || invoice.cashierId || '',
     createdAt: new Date().toISOString(),
   });
 
@@ -253,7 +262,12 @@ export const getInvoices = async (limitCount = 100) => {
     limit(limitCount)
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+  const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return invoices.filter(inv => inv.cashierId === userProfile.uid || inv.addedBy === userProfile.uid);
+  }
+  return invoices;
 };
 
 export const getInvoicesByDateRange = async (startDate: string, endDate: string) => {
@@ -264,14 +278,24 @@ export const getInvoicesByDateRange = async (startDate: string, endDate: string)
     orderBy('createdAt', 'desc')
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+  const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return invoices.filter(inv => inv.cashierId === userProfile.uid || inv.addedBy === userProfile.uid);
+  }
+  return invoices;
 };
 
 // Vouchers
 export const getVouchers = async () => {
   const q = query(collection(db, COLLECTIONS.VOUCHERS), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Voucher));
+  const vouchers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Voucher));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return vouchers.filter(v => v.addedBy === userProfile.uid);
+  }
+  return vouchers;
 };
 
 export const getVoucherByCode = async (code: string) => {
@@ -282,8 +306,10 @@ export const getVoucherByCode = async (code: string) => {
 };
 
 export const addVoucher = async (voucher: Omit<Voucher, 'id'>) => {
+  const { userProfile } = useAuthStore.getState();
   const docRef = await addDoc(collection(db, COLLECTIONS.VOUCHERS), {
     ...voucher,
+    addedBy: userProfile?.uid || '',
     code: voucher.code.toUpperCase(),
     usedCount: 0,
     createdAt: new Date().toISOString(),
@@ -303,12 +329,19 @@ export const deleteVoucher = async (id: string) => {
 export const getWarrantyClaims = async () => {
   const q = query(collection(db, COLLECTIONS.WARRANTY_CLAIMS), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WarrantyClaim));
+  const claims = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WarrantyClaim));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return claims.filter(c => c.addedBy === userProfile.uid);
+  }
+  return claims;
 };
 
 export const addWarrantyClaim = async (claim: Omit<WarrantyClaim, 'id'>) => {
+  const { userProfile } = useAuthStore.getState();
   const docRef = await addDoc(collection(db, COLLECTIONS.WARRANTY_CLAIMS), {
     ...claim,
+    addedBy: userProfile?.uid || '',
     createdAt: new Date().toISOString(),
   });
   return docRef.id;
@@ -377,11 +410,20 @@ export const getDashboardStats = async () => {
     getDocs(query(collection(db, COLLECTIONS.INVOICES), where('status', '==', 'paid'))),
   ]);
 
-  const allInvoices = invoices.docs.map(d => ({ id: d.id, ...d.data() } as Invoice));
+  let allInvoices = invoices.docs.map(d => ({ id: d.id, ...d.data() } as Invoice));
+  let productsData = products.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+  let customersData = customers.docs.map(d => ({ id: d.id, ...d.data() } as Customer));
+
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    productsData = productsData.filter(p => p.addedBy === userProfile.uid);
+    customersData = customersData.filter(c => c.addedBy === userProfile.uid);
+    allInvoices = allInvoices.filter(inv => inv.cashierId === userProfile.uid || inv.addedBy === userProfile.uid);
+  }
+
   const todayInvoices = allInvoices.filter(inv => inv.createdAt >= todayStr);
   const monthInvoices = allInvoices.filter(inv => inv.createdAt >= monthStart);
 
-  const productsData = products.docs.map(d => ({ id: d.id, ...d.data() } as Product));
   const lowStockProducts = productsData.filter(p => p.stock <= p.minStock);
 
   const todaySales = todayInvoices.reduce((sum, inv) => sum + inv.total, 0);
@@ -402,7 +444,7 @@ export const getDashboardStats = async () => {
     monthProfit,
     totalProducts: productsData.length,
     lowStockCount: lowStockProducts.length,
-    totalCustomers: customers.size,
+    totalCustomers: customersData.length,
     todayTransactions: todayInvoices.length,
     monthTransactions: monthInvoices.length,
     recentInvoices: allInvoices.slice(0, 5),
@@ -445,12 +487,19 @@ export const saveInvoiceSettings = async (settings: typeof DEFAULT_INVOICE_SETTI
 export const getSuppliers = async () => {
   const q = query(collection(db, COLLECTIONS.SUPPLIERS), orderBy('name'));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+  const suppliers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return suppliers.filter(s => s.addedBy === userProfile.uid);
+  }
+  return suppliers;
 };
 
 export const addSupplier = async (supplier: Omit<Supplier, 'id' | 'createdAt'>) => {
+  const { userProfile } = useAuthStore.getState();
   const docRef = await addDoc(collection(db, COLLECTIONS.SUPPLIERS), {
     ...supplier,
+    addedBy: userProfile?.uid || '',
     balance: Number(supplier.balance || 0),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -491,8 +540,10 @@ export const generateSupplierInvoiceNumber = () => {
 };
 
 export const addSupplierPayment = async (payment: Omit<SupplierPayment, 'id'>) => {
+  const { userProfile } = useAuthStore.getState();
   const cleanPayment = stripUndefined({
     ...payment,
+    addedBy: userProfile?.uid || '',
     createdAt: new Date().toISOString(),
   });
   const docRef = await addDoc(collection(db, COLLECTIONS.SUPPLIER_PAYMENTS), cleanPayment);
@@ -514,7 +565,12 @@ export const getSupplierPayments = async (supplierId?: string) => {
     );
   }
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierPayment));
+  const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupplierPayment));
+  const { userProfile, isAdmin } = useAuthStore.getState();
+  if (!isAdmin() && userProfile) {
+    return payments.filter(p => p.addedBy === userProfile.uid);
+  }
+  return payments;
 };
 
 // Delete Customer Sales Invoice

@@ -36,6 +36,7 @@ export interface Customer {
   email: string;
   phone: string;
   address: string;
+  addedBy?: string;
   createdAt: string;
   totalPurchases: number;
   loyaltyPoints: number;
@@ -56,6 +57,8 @@ export interface Invoice {
   status: 'paid' | 'pending' | 'cancelled';
   createdAt: string;
   createdBy: string;
+  cashierId?: string;
+  addedBy?: string;
 }
 
 export interface Voucher {
@@ -68,6 +71,7 @@ export interface Voucher {
   usedCount: number;
   expiryDate: string;
   isActive: boolean;
+  addedBy?: string;
   createdAt: string;
 }
 
@@ -86,6 +90,7 @@ export interface WarrantyClaim {
   issue: string;
   status: 'pending' | 'processing' | 'resolved' | 'rejected';
   resolution?: string;
+  addedBy?: string;
   createdAt: string;
 }
 
@@ -97,6 +102,7 @@ export interface Supplier {
   address?: string;
   company?: string;
   balance: number;
+  addedBy?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -114,6 +120,7 @@ export interface SupplierPayment {
   paymentMethod: string;
   note?: string;
   invoiceNumber: string;
+  addedBy?: string;
   createdAt: string;
 }
 
